@@ -132,7 +132,7 @@ private final class LocalAuthentication: NIOSSHServerUserAuthenticationDelegate 
 }
 
 /// A deterministic echo endpoint; it does not execute local commands.
-private final class LocalTerminal: ChannelDuplexHandler {
+private final class LocalTerminal: ChannelInboundHandler {
     typealias InboundIn = SSHChannelData
     typealias OutboundOut = SSHChannelData
     private let state: ServerState
