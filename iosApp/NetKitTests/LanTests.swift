@@ -22,7 +22,9 @@ final class LanTests: XCTestCase {
         let openPort = try XCTUnwrap(listener.port?.rawValue)
 
         let fd = socket(AF_INET, SOCK_STREAM, 0)
-        XCTAssertGreaterThanOrEqual(fd, 0)
+        guard fd >= 0 else { listener.cancel(); XCTFail("Could not create socket"); return }
+        var fdOpen = true
+        defer { if fdOpen { close(fd) }; listener.cancel() }
         var address = sockaddr_in()
         address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
         address.sin_family = sa_family_t(AF_INET)
@@ -30,17 +32,30 @@ final class LanTests: XCTestCase {
         let bound = withUnsafePointer(to: &address) {
             $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) }
         }
-        XCTAssertEqual(bound, 0)
+        guard bound == 0 else { XCTFail("Could not bind socket"); return }
         var length = socklen_t(MemoryLayout<sockaddr_in>.size)
         let named = withUnsafeMutablePointer(to: &address) {
             $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { getsockname(fd, $0, &length) }
         }
-        XCTAssertEqual(named, 0)
+        guard named == 0 else { XCTFail("Could not obtain port"); return }
         let closedPort = UInt16(bigEndian: address.sin_port)
-        defer { close(fd); listener.cancel() }
+        // Darwin can drop SYNs for a bound socket that is not listening; release it first.
+        guard close(fd) == 0 else { fdOpen = false; XCTFail("Could not close socket"); return }
+        fdOpen = false
         XCTAssertNotEqual(openPort, closedPort)
         let done = expectation(description: "port scan")
-        let scan = PortScan(host: "127.0.0.1", ports: [openPort, closedPort])
+        var states: [UInt16: [String]] = [:]
+        var refusedPorts = Set<UInt16>()
+        let scan = PortScan(host: "127.0.0.1", ports: [openPort, closedPort]) { port, state in
+            switch state {
+            case .waiting(let error), .failed(let error):
+                if case .posix(let code) = error {
+                    states[port, default: []].append("\(String(reflecting: state)) POSIX=\(code.rawValue)")
+                    if code == .ECONNREFUSED { refusedPorts.insert(port) }
+                } else { states[port, default: []].append(String(reflecting: state)) }
+            default: states[port, default: []].append(String(reflecting: state))
+            }
+        }
         var results: [UInt16: String] = [:]
         scan.start { port, result, complete in
             if let port, let result { results[port] = result }
@@ -48,7 +63,9 @@ final class LanTests: XCTestCase {
         }
         wait(for: [done], timeout: 8)
         XCTAssertEqual(results[openPort], String(localized: "lan.open"))
-        XCTAssertEqual(results[closedPort], String(localized: "lan.closed"))
+        XCTAssertEqual(results[closedPort], String(localized: "lan.closed"),
+                       "NWConnection states: \(states[closedPort] ?? [])")
+        XCTAssertTrue(refusedPorts.contains(closedPort), "NWConnection states: \(states[closedPort] ?? [])")
     }
 
     func testBonjourStartCanBeCancelled() {
@@ -183,6 +200,35 @@ final class IcmpPingTests: XCTestCase {
 }
 
 final class WolPersistenceTests: XCTestCase {
+    func testMissingFileErrorClassification() {
+        let cocoaMissing = NSError(domain: NSCocoaErrorDomain, code: NSFileNoSuchFileError)
+        let cocoaReadMissing = NSError(domain: NSCocoaErrorDomain, code: NSFileReadNoSuchFileError)
+        let posixMissing = NSError(domain: NSPOSIXErrorDomain, code: Int(ENOENT))
+        let nestedCocoa4 = NSError(domain: NSCocoaErrorDomain, code: NSFileReadUnknownError,
+                                   userInfo: [NSUnderlyingErrorKey: cocoaMissing])
+        let nestedCocoa260 = NSError(domain: "fixture.wrapper", code: 1,
+                                     userInfo: [NSUnderlyingErrorKey: cocoaReadMissing])
+        let nestedPosix = NSError(domain: NSCocoaErrorDomain, code: NSFileReadUnknownError,
+                                  userInfo: [NSUnderlyingErrorKey: posixMissing])
+        let genericCocoaWrapper = NSError(domain: NSCocoaErrorDomain, code: 1,
+                                          userInfo: [NSUnderlyingErrorKey: posixMissing])
+        for error in [cocoaMissing, cocoaReadMissing, posixMissing, nestedCocoa4, nestedCocoa260, nestedPosix, genericCocoaWrapper] {
+            XCTAssertTrue(WolPersistence.isMissingFile(error))
+        }
+        let denied = NSError(domain: NSPOSIXErrorDomain, code: Int(EACCES))
+        let notDirectory = NSError(domain: NSPOSIXErrorDomain, code: Int(ENOTDIR))
+        let ioError = NSError(domain: NSPOSIXErrorDomain, code: Int(EIO))
+        let nestedDenied = NSError(domain: NSCocoaErrorDomain, code: NSFileReadUnknownError,
+                                   userInfo: [NSUnderlyingErrorKey: denied])
+        let explicitDenied = NSError(domain: NSCocoaErrorDomain, code: NSFileReadNoPermissionError,
+                                     userInfo: [NSUnderlyingErrorKey: posixMissing])
+        let nestedIO = NSError(domain: NSCocoaErrorDomain, code: NSFileReadUnknownError,
+                               userInfo: [NSUnderlyingErrorKey: ioError])
+        for error in [denied, notDirectory, ioError, nestedDenied, nestedIO, explicitDenied] {
+            XCTAssertFalse(WolPersistence.isMissingFile(error))
+        }
+    }
+
     func testEmptyRoundTripAndCorruptionDoesNotReset() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         let store = WolPersistence(directoryOverride: directory)
@@ -194,6 +240,14 @@ final class WolPersistenceTests: XCTestCase {
         try invalid.write(to: file, options: .atomic)
         XCTAssertNotNil(store.load().failure)
         XCTAssertEqual(try Data(contentsOf: file), invalid)
+    }
+
+    func testMissingFileInExistingDirectoryIsEmpty() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let result = WolPersistence(directoryOverride: directory).load()
+        XCTAssertNil(result.failure)
+        XCTAssertTrue(result.devices.isEmpty)
     }
 
     func testProfileRoundTrip() throws {
@@ -242,7 +296,8 @@ final class WolPersistenceTests: XCTestCase {
         let original = Data("unchanged".utf8)
         try original.write(to: file)
         let store = WolPersistence(directoryOverride: file)
-        XCTAssertNotNil(store.load().failure)
+        XCTAssertEqual(store.load().failure, .io)
+        XCTAssertEqual(try Data(contentsOf: file), original)
         XCTAssertFalse(store.save(devices: []))
         XCTAssertEqual(try Data(contentsOf: file), original)
     }

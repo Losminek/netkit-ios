@@ -5,13 +5,15 @@ import Network
 final class PortScan {
     private let host: String
     private var pending: [UInt16]
+    private let stateObserver: ((UInt16, NWConnection.State) -> Void)?
     private var active: [UInt16: NWConnection] = [:]
     private var timeouts: [UInt16: DispatchWorkItem] = [:]
     private var handler: ((UInt16?, String?, Bool) -> Void)?
     private var cancelled = false
 
-    init(host: String, ports: [UInt16]) {
+    init(host: String, ports: [UInt16], stateObserver: ((UInt16, NWConnection.State) -> Void)? = nil) {
         self.host = host
+        self.stateObserver = stateObserver
         self.pending = ports.count <= 64 ? Array(Set(ports)).sorted() : []
     }
 
@@ -44,6 +46,7 @@ final class PortScan {
             timeouts[port] = timeout
             DispatchQueue.main.asyncAfter(deadline: .now() + 5, execute: timeout)
             connection.stateUpdateHandler = { [weak self] state in
+                self?.stateObserver?(port, state)
                 switch state {
                 case .ready: self?.finish(port, key: "lan.open")
                 case .waiting(let error):

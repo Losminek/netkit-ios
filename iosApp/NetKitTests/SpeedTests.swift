@@ -109,16 +109,18 @@ private final class FakeNdtSocket: NdtSocket {
     let streaming: Bool
     let closeDuringUpload: Bool
     let failOpen: Bool
+    let noData: Bool
     init(download: Bool, failAfterData: Bool = false, streaming: Bool = false,
-         closeDuringUpload: Bool = false, failOpen: Bool = false) {
+         closeDuringUpload: Bool = false, failOpen: Bool = false, noData: Bool = false) {
         self.download = download; self.failAfterData = failAfterData; self.streaming = streaming
-        self.closeDuringUpload = closeDuringUpload; self.failOpen = failOpen
+        self.closeDuringUpload = closeDuringUpload; self.failOpen = failOpen; self.noData = noData
     }
     var normalClosure: Bool { lock.lock(); defer { lock.unlock() }; return normal }
     func open() async throws { if failOpen { throw End.broken } }
     private func nextRead() -> Int { lock.lock(); defer { lock.unlock() }; reads += 1; return reads }
     private func recordSend() { lock.lock(); sends += 1; lock.unlock() }
     func state() -> (Int, Bool) { lock.lock(); defer { lock.unlock() }; return (sends, closed) }
+    func readCount() -> Int { lock.lock(); defer { lock.unlock() }; return reads }
     func wasSendFailureFirst() -> Bool { lock.lock(); defer { lock.unlock() }; return sendFailedBeforeReader }
     private func markNormal() { lock.lock(); normal = true; lock.unlock() }
     private func markReaderFinished() { lock.lock(); readerFinished = true; lock.unlock() }
@@ -129,6 +131,10 @@ private final class FakeNdtSocket: NdtSocket {
     }
     func receive() async throws -> URLSessionWebSocketTask.Message {
         let number = nextRead()
+        if noData {
+            try await Task.sleep(nanoseconds: 30_000_000_000)
+            throw CancellationError()
+        }
         if number == 1 {
             if download { return .data(Data(repeating: 42, count: 1_048_576)) }
             return .string(#"{"AppInfo":{"ElapsedTime":1000000,"NumBytes":1000000}}"#)
@@ -180,25 +186,60 @@ extension SpeedTests {
         catch { XCTFail("Unexpected error: \(error)") }
     }
 
-    func testNdtDownloadUploadAndBrokenConnection() async throws {
-        let url = URL(string: "wss://example.invalid/")!
-        let download = FakeNdtSocket(download: true)
-        let downClient = Ndt7Client(duration: 1.5, grace: 0, socketFactory: { _, _ in download })
-        let down = try await downClient.direction(url: url, download: true)
-        XCTAssertEqual(down, 0, accuracy: 0.000_001)
-        XCTAssertTrue(download.state().1)
-        let flowing = FakeNdtSocket(download: true, streaming: true)
-        let flowingClient = Ndt7Client(duration: 1.5, grace: 0, socketFactory: { _, _ in flowing })
-        let flowingRate = try await flowingClient.direction(url: url, download: true)
-        XCTAssertGreaterThan(flowingRate, 0)
-        let upload = FakeNdtSocket(download: false)
-        let upClient = Ndt7Client(duration: 1.5, grace: 0, socketFactory: { _, _ in upload })
-        let result = try await upClient.direction(url: url, download: false)
-        XCTAssertEqual(result, 8)
-        XCTAssertGreaterThan(upload.state().0, 0)
-        let broken = FakeNdtSocket(download: true, failAfterData: true)
-        let brokenClient = Ndt7Client(duration: 1.5, grace: 0, socketFactory: { _, _ in broken })
-        do { _ = try await brokenClient.direction(url: url, download: true); XCTFail("Broken socket must fail") } catch { }
+    func testNdtDownloadWithoutDataIsIncomplete() async throws {
+        let socket = FakeNdtSocket(download: true, noData: true)
+        let client = Ndt7Client(duration: 1.5, grace: 0, socketFactory: { _, _ in socket })
+        do {
+            _ = try await client.direction(url: URL(string: "wss://example.invalid/")!, download: true)
+            XCTFail("A download without data must be incomplete")
+        } catch SpeedFailure.incomplete { }
+        XCTAssertTrue(socket.state().1)
+    }
+
+    func testNdtBurstThenStallReturnsBoundedRate() async throws {
+        let socket = FakeNdtSocket(download: true)
+        let client = Ndt7Client(duration: 3, grace: 0, socketFactory: { _, _ in socket })
+        let rate = try await client.direction(url: URL(string: "wss://example.invalid/")!, download: true)
+        XCTAssertTrue(rate.isFinite)
+        XCTAssertGreaterThanOrEqual(rate, 0)
+        // One MiB total, divided by at least 1000 ms of measured time.
+        XCTAssertLessThanOrEqual(rate, 8.388_609)
+        XCTAssertGreaterThanOrEqual(socket.readCount(), 2)
+        XCTAssertTrue(socket.state().1)
+    }
+
+    func testSharedBurstThenStallHasZeroPostWarmupRate() throws {
+        let domain = IosSpeedDomain()
+        let trace = domain.createTrace()
+        for tick in 1...12 {
+            XCTAssertTrue(trace.add(elapsedMs: Int64(tick * 250), bytes: 1_048_576))
+        }
+        let summary = try XCTUnwrap(domain.summarize(trace: trace))
+        XCTAssertEqual(summary.mbps, 0, accuracy: 0.000_001)
+    }
+
+    func testNdtFlowingDownloadProducesRate() async throws {
+        let socket = FakeNdtSocket(download: true, streaming: true)
+        let client = Ndt7Client(duration: 3, grace: 0, socketFactory: { _, _ in socket })
+        let rate = try await client.direction(url: URL(string: "wss://example.invalid/")!, download: true)
+        XCTAssertGreaterThan(rate, 0)
+    }
+
+    func testNdtUploadUsesServerRate() async throws {
+        let socket = FakeNdtSocket(download: false)
+        let client = Ndt7Client(duration: 3, grace: 0, socketFactory: { _, _ in socket })
+        let rate = try await client.direction(url: URL(string: "wss://example.invalid/")!, download: false)
+        XCTAssertEqual(rate, 8)
+        XCTAssertGreaterThan(socket.state().0, 0)
+    }
+
+    func testNdtBrokenConnectionFails() async throws {
+        let socket = FakeNdtSocket(download: true, failAfterData: true)
+        let client = Ndt7Client(duration: 1.5, grace: 0, socketFactory: { _, _ in socket })
+        do {
+            _ = try await client.direction(url: URL(string: "wss://example.invalid/")!, download: true)
+            XCTFail("Broken socket must fail")
+        } catch SpeedFailure.incomplete { }
     }
 
     func testNdtCancellationClosesSocket() async throws {
