@@ -23,7 +23,6 @@ final class WolViewModel: ObservableObject {
         self.state = bridge.currentState()
         observation = bridge.observe { [weak self] state in
             self?.state = state
-            return KotlinUnit()
         }
     }
 

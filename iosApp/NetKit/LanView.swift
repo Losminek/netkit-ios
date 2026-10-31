@@ -166,7 +166,7 @@ final class LanSession: ObservableObject {
                 if names.count >= 128 { break }
                 if case let .service(name, type, domain, interface) = result.endpoint,
                    let safeName = self.domain.mdnsName(raw: name)?.value {
-                    names.insert("\(safeName) — \(type) \(domain) \(interface?.name ?? "")
+                    names.insert("\(safeName) — \(type) \(domain) \(interface?.name ?? "")")
                 }
             }
             self.results = names.sorted()

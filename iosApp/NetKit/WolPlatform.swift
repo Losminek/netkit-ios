@@ -39,8 +39,8 @@ final class WolPlatform: NSObject, IosWolPlatform {
     }
 
     func sendUdp(networkToken: String, host: String, port: Int32, payload: KotlinByteArray,
-                 completion: @escaping (SendFailure?) -> KotlinUnit) -> IosCancellation {
-        let operation = WolDatagram { failure in _ = completion(failure) }
+                 completion: @escaping (SendFailure?) -> Void) -> IosCancellation {
+        let operation = WolDatagram(completion: completion)
         guard networkToken == epoch, let (interface, address, mask) = current else {
             operation.finish(.networkLost)
             return operation
@@ -68,8 +68,8 @@ final class WolPlatform: NSObject, IosWolPlatform {
     }
 
     func probe(networkToken: String, host: String, port: KotlinInt?,
-               completion: @escaping (WakeProbeStatus) -> KotlinUnit) -> IosCancellation {
-        let operation = WolProbe { result in _ = completion(result) }
+               completion: @escaping (WakeProbeStatus) -> Void) -> IosCancellation {
+        let operation = WolProbe(completion: completion)
         guard networkToken == epoch, let (interface, address, mask) = current,
               let destination = Self.number(host),
               Self.permittedUnicast(destination, address: address, mask: mask) else {
