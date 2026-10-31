@@ -21,3 +21,21 @@ Rozcestník, struktura a sestavení: [README.md](README.md).
 - Před merge změny kódu musí diff zkontrolovat nezávislý reviewer.
 - Bez výslovného pokynu necommitovat, nepushovat a nic nenasazovat.
   Před destruktivní akcí popsat dopad a vyžádat potvrzení.
+
+## iOS práce (repo `netkit-ios`)
+
+Toto **veřejné** repo slouží k vývoji iOS verze (SwiftUI nad `:shared`). Vydání Androidu
+vznikají jinde (`Losminek/netkit`); odsud se nic nevydává ani netaguje.
+
+- **Vše, co se commitne, je po pushi veřejné.** Žádná tajemství, skutečné IP adresy, SSID, MAC,
+  hostname, jména osob, absolutní cesty ani výstupy z reálných sítí. Jen syntetická data
+  (192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24, 2001:db8::/32, localhost).
+- Interní zadání a reporty sem nepatří; report agenta se píše mimo repo.
+- Android (`androidApp/`, `androidMain`) se nemění; Android testy, lint a build musí projít beze změny.
+- iOS targety `:shared` se deklarují jen na macOS hostu nebo s `-Pnetkit.ios=true`; Linux build bez
+  přepínače zůstává jako dnes. `commonMain` bez `java.*`, `javax.*`, `android.*`.
+- Ověřuje se v simulátoru na macOS runneru GitHub Actions; žádný Apple účet, podpis pro zařízení
+  ani placená služba.
+- Nové závislosti jen s permisivní licencí (MIT, Apache-2.0, BSD), každá v `docs/zavislosti.md`
+  s verzí, zdrojem a datem ověření.
+- Agent nepushuje; práce na větvi `codex/*`, do `main` jen přes PR po revizi.
