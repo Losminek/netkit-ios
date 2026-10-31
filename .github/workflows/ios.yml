@@ -1,4 +1,4 @@
-name: iOS P0
+name: iOS P1
 
 on:
   push:
@@ -101,7 +101,7 @@ jobs:
             -derivedDataPath build/ios-derived \
             -resultBundlePath artifacts/ios/build.xcresult \
             CODE_SIGNING_ALLOWED=NO build 2>&1 | tee artifacts/ios/build.log
-      - name: Swift shared smoke and localized launch tests
+      - name: Swift local transport integration and localized launch tests
         run: |
           xcodebuild -project iosApp/NetKit.xcodeproj -scheme NetKit \
             -configuration Debug -sdk iphonesimulator \

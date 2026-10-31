@@ -549,3 +549,32 @@ logika `shared/.../update/UpdateInfo.kt` a `UpdateFetch.kt` (`nextRedirect`, `ch
   náhled schránky, **nebrání vložení ani čtení oprávněnou aplikací**. Veřejný SSH klíč,
   fingerprint a LAN výsledky se tímto příznakem neoznačují; nejde o kopie přihlašovacích
   tajemství. Ověření implementace a neprovedené kontroly: report 30 (interní záznam).
+
+## iOS síťové nástroje (P1, 2026-10-31)
+
+Android pravidla výše se nemění. iOS používá SwiftUI a platformní síťová API:
+
+- `NSLocalNetworkUsageDescription`: uživatelem spuštěné TCP/DNS/ICMP sondy, Bonjour a WoL.
+  `NSBonjourServices` uvádí konkrétní `_ssh._tcp`; aplikace neprohlíží všechny typy služeb.
+- `NSLocationWhenInUseUsageDescription`: vysvětlení pro aktuální Wi-Fi. Access Wi-Fi Information
+  entitlement není přidaný; bez něj se zobrazí nedostupnost údajů a nevyžaduje se nepoužitelná poloha.
+- Restricted multicast entitlement není přidaný ani vyžádaný. WoL broadcast je odmítnut před
+  odesláním; povolen je pouze unicast ve zjištěné podsíti vybraného Wi-Fi rozhraní, bez mobilního
+  fallbacku. Změna pozorované síťové cesty ruší operace. Změnu AP bez změny rozhraní nelze
+  bez potřebných oprávnění spolehlivě identifikovat.
+- TCP: jediný zadaný cíl, maximálně 64 portů, čtyři současná spojení, konečné timeouty.
+  ICMP je datagramový, bez raw socketů. Síťové nástroje vyžadují potvrzení vlastní/povolené sítě;
+  nic se nespouští automaticky. Zrušení operace a opuštění obrazovky ukončuje její transporty.
+- DNS i názvy Bonjour jsou nedůvěryhodné: sdílené parsery a sanitizace, kontrola dotazu/odpovědi,
+  omezená velikost odpovědi. Odmítnutá či zkrácená DNS zpráva se nezobrazuje jako úspěšná odpověď.
+- Speedtest používá HTTPS/WSS, odmítá přesměrování a omezuje velikost odpovědí i fronty.
+  Každý start potvrzuje datovou zátěž; NDT7 navíc uchování a veřejné zveřejnění výsledku včetně IP
+  u M-Lab. Přístupové tokeny ani úplná přístupová URL se neukládají a nelogují. Žádná analytika
+  aplikace, reklamy nebo sledování. Dobrovolné měření M-Lab přesto představuje externí sběr dat,
+  který je uveden v privacy manifestu a upozornění uživatele.
+- Testovací provoz v CI směřuje pouze na loopback nebo do lokálních mocků. Local Network dialog,
+  skutečné oprávnění k Wi-Fi a chování fyzické sítě nejsou simulátorem ověřeny.
+
+Zdroje ověřené 2026-10-31: [Apple TN3179](https://developer.apple.com/documentation/technotes/tn3179-understanding-local-network-privacy),
+[Wi-Fi fetchCurrent](https://developer.apple.com/documentation/networkextension/nehotspotnetwork/fetchcurrent(completionhandler:)),
+[M-Lab NDT](https://www.measurementlab.net/tests/ndt/index.html).

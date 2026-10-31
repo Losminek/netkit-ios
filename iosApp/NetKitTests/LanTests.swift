@@ -1,0 +1,265 @@
+import Combine
+import Darwin
+import Network
+import XCTest
+import NetKitShared
+
+final class LanTests: XCTestCase {
+    func testTCPListenerAndClosedPort() throws {
+        let parameters = NWParameters.tcp
+        parameters.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: .any)
+        let listener = try NWListener(using: parameters)
+        let listening = expectation(description: "localhost listener")
+        listener.newConnectionHandler = { connection in
+            connection.stateUpdateHandler = { state in
+                if case .ready = state { DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { connection.cancel() } }
+            }
+            connection.start(queue: .main)
+        }
+        listener.stateUpdateHandler = { if case .ready = $0 { listening.fulfill() } }
+        listener.start(queue: .main)
+        wait(for: [listening], timeout: 5)
+        let openPort = try XCTUnwrap(listener.port?.rawValue)
+
+        let fd = socket(AF_INET, SOCK_STREAM, 0)
+        XCTAssertGreaterThanOrEqual(fd, 0)
+        var address = sockaddr_in()
+        address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+        address.sin_family = sa_family_t(AF_INET)
+        address.sin_addr = in_addr(s_addr: in_addr_t(INADDR_LOOPBACK).bigEndian)
+        let bound = withUnsafePointer(to: &address) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) }
+        }
+        XCTAssertEqual(bound, 0)
+        var length = socklen_t(MemoryLayout<sockaddr_in>.size)
+        let named = withUnsafeMutablePointer(to: &address) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { getsockname(fd, $0, &length) }
+        }
+        XCTAssertEqual(named, 0)
+        let closedPort = UInt16(bigEndian: address.sin_port)
+        defer { close(fd); listener.cancel() }
+        XCTAssertNotEqual(openPort, closedPort)
+        let done = expectation(description: "port scan")
+        let scan = PortScan(host: "127.0.0.1", ports: [openPort, closedPort])
+        var results: [UInt16: String] = [:]
+        scan.start { port, result, complete in
+            if let port, let result { results[port] = result }
+            if complete { done.fulfill() }
+        }
+        wait(for: [done], timeout: 8)
+        XCTAssertEqual(results[openPort], String(localized: "lan.open"))
+        XCTAssertEqual(results[closedPort], String(localized: "lan.closed"))
+    }
+
+    func testBonjourStartCanBeCancelled() {
+        let session = LanSession()
+        session.browse(loopbackOnly: true)
+        session.cancel()
+        let drained = expectation(description: "callbacks after cancellation")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { drained.fulfill() }
+        wait(for: [drained], timeout: 2)
+        XCTAssertFalse(session.running)
+    }
+
+    func testDnsLocalMock() throws {
+        let parameters = NWParameters.udp
+        parameters.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: .any)
+        let listener = try NWListener(using: parameters)
+        let ready = expectation(description: "DNS mock ready")
+        listener.stateUpdateHandler = { if case .ready = $0 { ready.fulfill() } }
+        listener.newConnectionHandler = { connection in
+            connection.start(queue: .main)
+            connection.receiveMessage { data, _, _, _ in
+                guard var response = data, response.count >= 12 else { return }
+                XCTAssertEqual(response[2] & 0x01, 0x01, "DNS query must request recursion")
+                response[2] = 0x81; response[3] = 0x80
+                response[6] = 0; response[7] = 1
+                response.append(contentsOf: [0xc0, 0x0c, 0, 1, 0, 1, 0, 0, 0, 1, 0, 4, 192, 0, 2, 1])
+                connection.send(content: response, completion: .contentProcessed { _ in connection.cancel() })
+            }
+        }
+        listener.start(queue: .main)
+        defer { listener.cancel() }
+        wait(for: [ready], timeout: 5)
+        let port = try XCTUnwrap(listener.port?.rawValue)
+        let answer = expectation(description: "DNS result")
+        let session = LanSession()
+        let observation = session.$results.sink { if $0.contains("192.0.2.1") { answer.fulfill() } }
+        session.dns(host: "example.invalid", server: "127.0.0.1", serverPort: port)
+        wait(for: [answer], timeout: 7)
+        withExtendedLifetime(observation) { }
+        session.cancel()
+    }
+
+    func testSharedDnsRejectsWrongID() throws {
+        let domain = IosNetworkDomain()
+        let query = try XCTUnwrap(domain.dnsQuery(host: "example.invalid", type: 1, id: 1))
+        XCTAssertNil(domain.dnsResponse(packet: query, id: 2, host: "example.invalid", type: 1))
+    }
+}
+
+final class WolDatagramTests: XCTestCase {
+    func testSharedMagicPacketReachesLoopback() throws {
+        let parameters = NWParameters.udp
+        parameters.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: .any)
+        let listener = try NWListener(using: parameters)
+        let ready = expectation(description: "UDP listener ready")
+        let received = expectation(description: "magic packet received")
+        var actual: Data?
+        listener.stateUpdateHandler = { if case .ready = $0 { ready.fulfill() } }
+        listener.newConnectionHandler = { connection in
+            connection.start(queue: .main)
+            connection.receiveMessage { data, _, _, _ in
+                actual = data
+                received.fulfill()
+                connection.cancel()
+            }
+        }
+        listener.start(queue: .main)
+        defer { listener.cancel() }
+        wait(for: [ready], timeout: 5)
+        let port = try XCTUnwrap(listener.port)
+        let mac = try XCTUnwrap(WolDomainKt.parseMac(input: "02:00:00:00:00:01"))
+        let packet = WolDomainKt.magicPacket(mac: mac)
+        let data = Data((0..<packet.size).map { UInt8(bitPattern: packet.get(index: $0)) })
+        let sent = expectation(description: "UDP packet sent")
+        let operation = WolDatagram { error in
+            XCTAssertNil(error)
+            sent.fulfill()
+        }
+        operation.start(connection: NWConnection(host: "127.0.0.1", port: port, using: .udp), payload: data)
+        wait(for: [sent, received], timeout: 5)
+        XCTAssertEqual(actual, data)
+        XCTAssertEqual(data.count, 102)
+        XCTAssertEqual(Array(data.prefix(6)), Array(repeating: 0xff, count: 6))
+        for index in 0..<16 {
+            XCTAssertEqual(Array(data[(6 + index * 6)..<(12 + index * 6)]), [2, 0, 0, 0, 0, 1])
+        }
+    }
+}
+
+final class IcmpPingTests: XCTestCase {
+    func testRequestChecksumAndSharedReplyMatching() {
+        let request = IcmpPing.makeRequest(payload: Array(repeating: 0x5a, count: 16))
+        var sum: UInt32 = 0
+        for index in stride(from: 0, to: request.count, by: 2) {
+            sum += UInt32(request[index]) << 8 | UInt32(request[index + 1])
+        }
+        while sum >> 16 != 0 { sum = (sum & 0xffff) + (sum >> 16) }
+        XCTAssertEqual(sum, 0xffff)
+        var reply = request
+        reply[0] = 0
+        let sent = KotlinByteArray(size: Int32(request.count))
+        let received = KotlinByteArray(size: Int32(reply.count))
+        for (index, byte) in request.enumerated() { sent.set(index: Int32(index), value: Int8(bitPattern: byte)) }
+        for (index, byte) in reply.enumerated() { received.set(index: Int32(index), value: Int8(bitPattern: byte)) }
+        XCTAssertTrue(IosNetworkDomain().icmpReplyMatches(request: sent, reply: received))
+        received.set(index: 8, value: 0)
+        XCTAssertFalse(IosNetworkDomain().icmpReplyMatches(request: sent, reply: received))
+    }
+
+    func testLoopbackEcho() {
+        let ping = IcmpPing()
+        let done = expectation(description: "loopback ICMP echo")
+        ping.start(address: "127.0.0.1") { result in
+            if case .reply(let milliseconds) = result {
+                XCTAssertGreaterThanOrEqual(milliseconds, 0)
+            } else {
+                XCTFail("Loopback did not return an ICMP echo reply")
+            }
+            done.fulfill()
+        }
+        wait(for: [done], timeout: 7)
+    }
+
+    func testCancelledBeforeStartDoesNotComplete() {
+        let ping = IcmpPing()
+        ping.cancel()
+        let completed = expectation(description: "cancelled ping does not complete")
+        completed.isInverted = true
+        ping.start(address: "127.0.0.1") { _ in completed.fulfill() }
+        wait(for: [completed], timeout: 0.3)
+    }
+}
+
+final class WolPersistenceTests: XCTestCase {
+    func testEmptyRoundTripAndCorruptionDoesNotReset() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let store = WolPersistence(directoryOverride: directory)
+        XCTAssertNil(store.load().failure)
+        XCTAssertTrue(store.save(devices: []))
+        XCTAssertNil(store.load().failure)
+        let file = directory.appendingPathComponent("wol.json")
+        let invalid = Data("invalid json".utf8)
+        try invalid.write(to: file, options: .atomic)
+        XCTAssertNotNil(store.load().failure)
+        XCTAssertEqual(try Data(contentsOf: file), invalid)
+    }
+
+    func testProfileRoundTrip() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let store = WolPersistence(directoryOverride: directory)
+        let device = WolDevice(id: "synthetic-1", name: "Test", mac: "02:00:00:00:00:01",
+                               targetMode: .custom, customTarget: "192.0.2.1", port: 9,
+                               probeHost: "192.0.2.2", probePort: KotlinInt(value: 22), note: "Test",
+                               createdAt: 1000, updatedAt: 2000, repeatCount: 3, repeatIntervalMs: 250,
+                               probeEnabled: true, probeDelaySeconds: 20)
+        XCTAssertTrue(store.save(devices: [device]))
+        let result = store.load()
+        XCTAssertNil(result.failure)
+        let loaded = try XCTUnwrap(result.devices.first)
+        XCTAssertEqual(result.devices.count, 1)
+        XCTAssertEqual(loaded.id, device.id)
+        XCTAssertEqual(loaded.name, device.name)
+        XCTAssertEqual(loaded.mac, device.mac)
+        XCTAssertEqual(loaded.targetMode, device.targetMode)
+        XCTAssertEqual(loaded.customTarget, device.customTarget)
+        XCTAssertEqual(loaded.port, device.port)
+        XCTAssertEqual(loaded.probeHost, device.probeHost)
+        XCTAssertEqual(loaded.probePort, device.probePort)
+        XCTAssertEqual(loaded.note, device.note)
+        XCTAssertEqual(loaded.createdAt, device.createdAt)
+        XCTAssertEqual(loaded.updatedAt, device.updatedAt)
+        XCTAssertEqual(loaded.repeatCount, device.repeatCount)
+        XCTAssertEqual(loaded.repeatIntervalMs, device.repeatIntervalMs)
+        XCTAssertEqual(loaded.probeEnabled, device.probeEnabled)
+        XCTAssertEqual(loaded.probeDelaySeconds, device.probeDelaySeconds)
+    }
+
+    func testOversizeFileIsRejectedWithoutReset() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let file = directory.appendingPathComponent("wol.json")
+        let oversized = Data(repeating: 0x61, count: 1_048_577)
+        try oversized.write(to: file)
+        let store = WolPersistence(directoryOverride: directory)
+        XCTAssertNotNil(store.load().failure)
+        XCTAssertEqual(try Data(contentsOf: file), oversized)
+    }
+
+    func testStoreFailsWhenDirectoryIsAFile() throws {
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let original = Data("unchanged".utf8)
+        try original.write(to: file)
+        let store = WolPersistence(directoryOverride: file)
+        XCTAssertNotNil(store.load().failure)
+        XCTAssertFalse(store.save(devices: []))
+        XCTAssertEqual(try Data(contentsOf: file), original)
+    }
+}
+
+final class WolAddressPolicyTests: XCTestCase {
+    func testOnlyLocalUnicastIsAllowed() {
+        let address: UInt32 = 0xc000020a // 192.0.2.10
+        let mask: UInt32 = 0xffffff00
+        XCTAssertTrue(WolPlatform.permittedUnicast(0xc000020b, address: address, mask: mask))
+        XCTAssertFalse(WolPlatform.permittedUnicast(0xc0000200, address: address, mask: mask))
+        XCTAssertFalse(WolPlatform.permittedUnicast(0xc00002ff, address: address, mask: mask))
+        XCTAssertFalse(WolPlatform.permittedUnicast(0xc6336401, address: address, mask: mask))
+        XCTAssertFalse(WolPlatform.permittedUnicast(0xe0000001, address: address, mask: 0))
+        XCTAssertFalse(WolPlatform.permittedUnicast(0xf0000001, address: address, mask: 0))
+        XCTAssertFalse(WolPlatform.permittedUnicast(0x7f000001, address: address, mask: 0))
+        XCTAssertFalse(WolPlatform.permittedUnicast(0x00000001, address: address, mask: 0))
+        XCTAssertTrue(WolPlatform.permittedUnicast(0xc000020b, address: address, mask: 0xfffffffe))
+    }
+}

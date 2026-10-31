@@ -527,3 +527,16 @@ Runner provisioning má [MIT licenci](https://github.com/actions/runner-images/b
 ta se nevztahuje na Apple SDK, pro které platí
 [Apple SDK agreement](https://www.apple.com/legal/sla/docs/xcode.pdf). SDK se nepřibaluje do repa.
 Distribuce aplikace ani posouzení SSH kryptografie nejsou součástí P0.
+
+## 7. iOS síťové nástroje (P1, 2026-10-31)
+
+Žádná nová knihovna, Swift Package, verze Gradle závislosti ani změna verification metadat.
+Používají se stávající coroutines/serialization a sdílená doména. SwiftUI, Network.framework,
+Foundation/URLSession, NetworkExtension, Security (náhodné bajty) a Darwin jsou systémová API
+SDK Xcode 16.4 / iOS 18.5 z §6; SDK se nepřibaluje. Swift `Package.resolved` nadále není potřeba.
+
+Network.framework obsluhuje TCP, DNS UDP, Bonjour a WoL. POSIX datagramový ICMP je vlastní
+implementace nad veřejným API, bez přibalení či kopírování cizího síťového kódu. Speedtest používá
+URLSession HTTPS/WSS a existující sdílené parsery; neposkytuje ani nevyžaduje placenou službu.
+Runner, Xcode, SHA akcí a Linux build se kvůli P1 nemění. Skutečný stav ověření je v
+[ios.md §9](ios.md#9-síťové-nástroje--p1-implementace-čeká-macos-ci).

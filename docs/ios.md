@@ -1,7 +1,8 @@
 # NetKit — iOS analýza
 
-**Stav 2026-10-31:** připravena kostra P0 — SwiftUI nad `:shared`, sestavení a testy pro macOS CI;
-úspěšný běh v simulátoru zatím není doložen. Aktuální implementaci a omezení popisuje §8.
+**Stav 2026-10-31:** P0 ověřena v ARM simulátoru — SwiftUI nad `:shared`, link, build, Kotlin/Native,
+XCTest bridge a CS/EN UI testy prošly v [CI 41219799892](https://github.com/Losminek/netkit-ios/actions/runs/41219799892).
+Aktuální implementaci a omezení popisují §8–9.
 Níže původní analýza z 2026-10-27 (D12) a v §7 ověření
 buildu bez Macu. Údaje označené „ověřit“ je nutné potvrdit v oficiální dokumentaci Applu
 v době, kdy se o iOS bude rozhodovat. Údaje v §6 byly ověřeny 2026-10-27; **[P]** = prokázáno
@@ -179,9 +180,10 @@ Linuxové spuštění s přepínačem není důkazem Apple linkování. Před da
 
 ### Dosud neimplementováno a neověřeno
 
-Síťové transporty, ping, DNS, mDNS, Wi-Fi info, speedtest, WoL odesílání, SSH, Keychain a terminál UI
-jsou další fáze. Kostra je nenahrazuje. iOS nemá Wi-Fi scan okolí ani graf kanálů; ty nejsou plánovány.
-Bez macOS CI není potvrzen Swift–Kotlin bridge, linkování ani spuštění testů v simulátoru.
+Síťové funkce P1 popisuje §9. SSH, Keychain a terminál UI jsou další fáze.
+iOS nemá Wi-Fi scan okolí ani graf kanálů; ty nejsou plánovány.
+P0 bridge, linkování a lokalizované UI testy potvrdil běh CI uvedený v úvodu. To neověřuje
+síťové transporty P1 ani chování na zařízení.
 
 Později na fyzickém zařízení, nikoli v této fázi:
 
@@ -190,3 +192,63 @@ Později na fyzickém zařízení, nikoli v této fázi:
 - WoL: unicast na povolený cíl; broadcast až s oprávněným multicast entitlementem.
 - ICMP: datagramový ping v povolené síti, timeout a zrušení bez raw socketů.
 - Entitlementy: ověřit dostupnost před zařízením/distribucí, nepožadovat je kvůli CI simulátoru.
+
+## 9. Síťové nástroje — P1 (implementace, čeká macOS CI)
+
+P1 používá Swift transporty nad existující doménou `:shared`. Adaptéry v `iosMain` zpřístupňují
+validaci portů, DNS zprávy, ICMP matcher, sanitizované mDNS názvy, rychlostní výpočty a skutečný
+`WolController`. `commonMain`, Android aplikace a její platformní implementace se v P1 nemění.
+
+### Transporty a rozsah
+
+| Nástroj | Implementace | Omezení |
+|---|---|---|
+| TCP porty | `NWConnection`, sdílený parser portů; jeden zadaný host, nejvýše 64 portů a čtyři současná spojení | Každý port má timeout; odlišuje odpověď, odmítnutí, timeout a chybu. Nejde o automatický sken rozsahu. |
+| DNS | UDP `NWConnection` na zadaný resolver, sdílené kódování a parsování zpráv | Kontroluje ID, otázku, třídu a typ, QR/RCODE a truncation; P1 UI dotazuje A, bez TCP fallbacku a DNSSEC validace. |
+| Ping | IPv4 `SOCK_DGRAM` / ICMP, checksum a náhodný payload; shared matcher kontroluje sekvenci a celý payload | Jeden dotaz s RTT a timeoutem, bez raw socketu. Dostupnost skutečného ICMP čeká na zařízení. Traceroute není implementován. |
+| mDNS | `NWBrowser` pro předem deklarovaný typ `_ssh._tcp`, sdílená sanitizace a model `LanDeviceName` | Omezené prohlížení služby po explicitním startu, nikoli seznam všech zařízení nebo všech Bonjour typů. |
+| Aktuální Wi-Fi | `NEHotspotNetwork.fetchCurrent`, explicitní načtení SSID/BSSID | Bez Access Wi-Fi Information entitlementu vrací prázdný stav; entitlement se nepřidává ani nežádá. Nejde o sken okolí. |
+| WoL | `WolController`, Swift implementace transportu přes UDP `NWConnection` a platformního úložiště | Unicast pouze v podsíti vybraného Wi-Fi rozhraní. Broadcast režim vytváří shared controller, transport jej bez restricted entitlementu odmítá. |
+| LibreSpeed | URLSession HTTPS, šest paralelních download a tři upload úlohy, sdílený trace a výpočet po náběhu | URLSession může HTTP/2 či HTTP/3 multiplexovat; počet úloh není záruka počtu TCP spojení ani shody s Android metodikou. |
+| NDT7 | HTTPS locate, validace shared parserem, URLSession WSS s ověřeným subprotokolem | Download vyhodnocuje klientský trace po náběhu, upload používá serverové AppInfo za celý test; metody se liší a UI to uvádí. |
+
+Swift Network.framework byl zvolen pro TCP, DNS a WoL, protože sjednocuje rušení, timeouty a
+výběr rozhraní s ostatními nativními API. POSIX je omezen na ICMP a čtení lokálního rozhraní,
+kde Network.framework neposkytuje potřebný datagramový ICMP transport. Žádná nová síťová knihovna.
+LAN sondy používají systémovou trasu; iOS P1 neslibuje Android vazbu všech LAN nástrojů na Wi-Fi.
+Uživatel potvrzuje, že zkoumá vlastní nebo povolený cíl, před zahájením operace.
+
+WoL připíná konkrétní `NWInterface`, vyžaduje Wi-Fi a při změně pozorované cesty ruší operace.
+Bez entitlementu nelze zaručit detekci každé změny AP/SSID na stejném rozhraní; timeout a token
+cesty jsou konzervativní ochrana, nikoli důkaz stejné fyzické sítě. Mobilní fallback pro WoL není.
+Routovaný unicast mimo místní podsíť P1 nepovoluje. Úspěšné UDP odeslání samo nedokazuje probuzení.
+Profily se ukládají atomicky do Application Support se zákazem zálohy, přes sdílený verzovaný
+WoL codec a limit 1 MiB. Chyba čtení se nezamění za prázdný seznam ani automatický reset.
+Adapter `WakeProber` podporuje připnutý TCP/ICMP pro profil s povolenou kontrolou; P1 formulář
+zatím nevystavuje nastavení této kontroly u nových profilů.
+
+### Oprávnění, soukromí a testy
+
+`Info.plist` obsahuje `NSLocalNetworkUsageDescription`, `NSBonjourServices` a
+`NSLocationWhenInUseUsageDescription`; popisy jsou v CS/EN `InfoPlist.strings`. Uživatelské texty
+jsou ve String Catalogu. Aplikace bez entitlementu nežádá polohu, kterou pro Wi-Fi nemůže využít.
+`PrivacyInfo.xcprivacy` deklaruje žádné sledování a důvod `35F9.1` pro měření intervalů.
+Obsahuje i deklaraci diagnostických/síťových údajů předávaných při volitelném NDT7: veřejná IP
+není anonymní údaj a M-Lab výsledky uchovává a zveřejňuje. Před každým startem je potvrzení
+objemu dat a u NDT7 také zveřejnění IP a odkaz na zásady. App Store formuláře se v této fázi nevyplňují.
+
+Speedtest nic nespouští automaticky, odpovědi mají velikostní limity a přesměrování se odmítají.
+Přístupové URL s tokeny se neukládají ani nelogují. Testy nepřenášejí zátěž na veřejné servery:
+TCP, DNS a WoL používají loopback; speed transporty používají lokální mocky. WSS fake ověřuje
+orchestraci, nenahrazuje handshake skutečného M-Lab serveru ani měření rychlosti na zařízení.
+
+Nové testy P1 čekají na první macOS CI. Linuxové testy nemohou potvrdit Swift kompilaci,
+Objective-C export, Apple linkování, síťové API simulátoru ani fyzickou Wi-Fi. Zelené P0
+potvrzuje pouze tehdejší kostru. Local Network dialog podle Apple simulátor nepodporuje.
+
+Ověřené oficiální zdroje (2026-10-31):
+
+- [Apple TN3179](https://developer.apple.com/documentation/technotes/tn3179-understanding-local-network-privacy): Local Network, Bonjour, multicast/broadcast a omezení simulátoru.
+- [NEHotspotNetwork.fetchCurrent](https://developer.apple.com/documentation/networkextension/nehotspotnetwork/fetchcurrent(completionhandler:)): podmínky údajů o aktuální Wi-Fi.
+- [Apple privacy API reasons](https://developer.apple.com/documentation/bundleresources/app-privacy-configuration/nsprivacyaccessedapitypes/nsprivacyaccessedapitype): důvod pro intervalové měření.
+- [M-Lab NDT](https://www.measurementlab.net/tests/ndt/index.html) a [Apple privacy details](https://developer.apple.com/app-store/app-privacy-details/): předávaná IP, výsledky a deklarace sběru.

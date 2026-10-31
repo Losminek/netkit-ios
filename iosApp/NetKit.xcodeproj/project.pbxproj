@@ -26,6 +26,24 @@
 			isa = PBXBuildFile;
 			fileRef = 000000000000000000000019 /* NetKitUITests.swift */;
 		};
+		000000000000000000000200 /* LanView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000100 /* LanView.swift */; };
+		000000000000000000000201 /* PortScan.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000101 /* PortScan.swift */; };
+		000000000000000000000202 /* IcmpPing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000102 /* IcmpPing.swift */; };
+		000000000000000000000203 /* WifiView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000103 /* WifiView.swift */; };
+		000000000000000000000204 /* SpeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000104 /* SpeedView.swift */; };
+		000000000000000000000205 /* WolPlatform.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000105 /* WolPlatform.swift */; };
+		000000000000000000000206 /* WolView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000106 /* WolView.swift */; };
+		000000000000000000000207 /* WolPersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000107 /* WolPersistence.swift */; };
+		000000000000000000000300 /* LanView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000100 /* LanView.swift */; };
+		000000000000000000000301 /* PortScan.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000101 /* PortScan.swift */; };
+		000000000000000000000302 /* IcmpPing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000102 /* IcmpPing.swift */; };
+		000000000000000000000303 /* WifiView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000103 /* WifiView.swift */; };
+		000000000000000000000304 /* SpeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000104 /* SpeedView.swift */; };
+		000000000000000000000305 /* WolPlatform.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000105 /* WolPlatform.swift */; };
+		000000000000000000000306 /* WolPersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000107 /* WolPersistence.swift */; };
+		000000000000000000000307 /* LanTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000108 /* LanTests.swift */; };
+		000000000000000000000308 /* SpeedTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000109 /* SpeedTests.swift */; };
+		000000000000000000000403 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000400 /* InfoPlist.strings */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -87,6 +105,18 @@
 			path = NetKitUITests.xctest;
 			sourceTree = BUILT_PRODUCTS_DIR;
 		};
+		000000000000000000000100 /* LanView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LanView.swift; sourceTree = "<group>"; };
+		000000000000000000000101 /* PortScan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PortScan.swift; sourceTree = "<group>"; };
+		000000000000000000000102 /* IcmpPing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IcmpPing.swift; sourceTree = "<group>"; };
+		000000000000000000000103 /* WifiView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WifiView.swift; sourceTree = "<group>"; };
+		000000000000000000000104 /* SpeedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeedView.swift; sourceTree = "<group>"; };
+		000000000000000000000105 /* WolPlatform.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WolPlatform.swift; sourceTree = "<group>"; };
+		000000000000000000000106 /* WolView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WolView.swift; sourceTree = "<group>"; };
+		000000000000000000000107 /* WolPersistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WolPersistence.swift; sourceTree = "<group>"; };
+		000000000000000000000108 /* LanTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LanTests.swift; sourceTree = "<group>"; };
+		000000000000000000000109 /* SpeedTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeedTests.swift; sourceTree = "<group>"; };
+		000000000000000000000401 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		000000000000000000000402 /* cs */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = cs; path = cs.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -129,7 +159,16 @@
 			children = (
 				000000000000000000000015 /* NetKitApp.swift */,
 				000000000000000000000016 /* Localizable.xcstrings */,
-				000000000000000000000017 /* PrivacyInfo.xcprivacy */
+				000000000000000000000017 /* PrivacyInfo.xcprivacy */,
+				000000000000000000000100 /* LanView.swift */,
+				000000000000000000000101 /* PortScan.swift */,
+				000000000000000000000102 /* IcmpPing.swift */,
+				000000000000000000000103 /* WifiView.swift */,
+				000000000000000000000104 /* SpeedView.swift */,
+				000000000000000000000105 /* WolPlatform.swift */,
+				000000000000000000000106 /* WolView.swift */,
+				000000000000000000000107 /* WolPersistence.swift */,
+				000000000000000000000400 /* InfoPlist.strings */
 			);
 			path = NetKit;
 			sourceTree = "<group>";
@@ -137,7 +176,9 @@
 		00000000000000000000001D /* NetKitTests */ = {
 			isa = PBXGroup;
 			children = (
-				000000000000000000000018 /* NetKitTests.swift */
+				000000000000000000000018 /* NetKitTests.swift */,
+				000000000000000000000108 /* LanTests.swift */,
+				000000000000000000000109 /* SpeedTests.swift */
 			);
 			path = NetKitTests;
 			sourceTree = "<group>";
@@ -262,7 +303,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				000000000000000000000002 /* Localizable.xcstrings in Resources */,
-				000000000000000000000003 /* PrivacyInfo.xcprivacy in Resources */
+				000000000000000000000003 /* PrivacyInfo.xcprivacy in Resources */,
+				000000000000000000000403 /* InfoPlist.strings in Resources */
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -287,7 +329,15 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				000000000000000000000001 /* NetKitApp.swift in Sources */
+				000000000000000000000001 /* NetKitApp.swift in Sources */,
+				000000000000000000000200 /* LanView.swift in Sources */,
+				000000000000000000000201 /* PortScan.swift in Sources */,
+				000000000000000000000202 /* IcmpPing.swift in Sources */,
+				000000000000000000000203 /* WifiView.swift in Sources */,
+				000000000000000000000204 /* SpeedView.swift in Sources */,
+				000000000000000000000205 /* WolPlatform.swift in Sources */,
+				000000000000000000000206 /* WolView.swift in Sources */,
+				000000000000000000000207 /* WolPersistence.swift in Sources */
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -295,7 +345,16 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				000000000000000000000004 /* NetKitTests.swift in Sources */
+				000000000000000000000004 /* NetKitTests.swift in Sources */,
+				000000000000000000000300 /* LanView.swift in Sources */,
+				000000000000000000000301 /* PortScan.swift in Sources */,
+				000000000000000000000302 /* IcmpPing.swift in Sources */,
+				000000000000000000000303 /* WifiView.swift in Sources */,
+				000000000000000000000304 /* SpeedView.swift in Sources */,
+				000000000000000000000305 /* WolPlatform.swift in Sources */,
+				000000000000000000000306 /* WolPersistence.swift in Sources */,
+				000000000000000000000307 /* LanTests.swift in Sources */,
+				000000000000000000000308 /* SpeedTests.swift in Sources */
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -316,6 +375,15 @@
 			targetProxy = 00000000000000000000002F;
 		};
 /* End PBXTargetDependency section */
+
+/* Begin PBXVariantGroup section */
+		000000000000000000000400 /* InfoPlist.strings */ = {
+			isa = PBXVariantGroup;
+			children = (000000000000000000000401 /* en */, 000000000000000000000402 /* cs */);
+			name = InfoPlist.strings;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
 
 /* Begin XCBuildConfiguration section */
 		000000000000000000000007 /* Debug */ = {
@@ -352,6 +420,7 @@
 					NetKitShared
 				);
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = NetKit/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = cz.netkit.ios;
@@ -373,6 +442,7 @@
 					NetKitShared
 				);
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = NetKit/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = cz.netkit.ios;
