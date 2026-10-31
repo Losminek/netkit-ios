@@ -21,6 +21,8 @@ struct ContentView: View {
                 .tabItem { Label("tab.speed", systemImage: "speedometer") }
             NavigationStack { WolView() }
                 .tabItem { Label("tab.wol", systemImage: "power") }
+            NavigationStack { SshView() }
+                .tabItem { Label("tab.ssh", systemImage: "terminal") }
         }
     }
 }

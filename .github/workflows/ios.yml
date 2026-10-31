@@ -1,4 +1,4 @@
-name: iOS P1
+name: iOS P2
 
 on:
   push:
@@ -88,11 +88,20 @@ jobs:
           test -s "$framework/NetKitShared"
           test -s "$framework/Headers/NetKitShared.h"
           test -s "$framework/Modules/module.modulemap"
+          cp "$framework/Headers/NetKitShared.h" artifacts/ios/NetKitShared.h
           {
             ls -lR "$framework"
             file "$framework/NetKitShared"
             lipo -archs "$framework/NetKitShared" | grep -w arm64
           } | tee artifacts/ios/framework.log
+      - name: Resolve only committed Swift package versions
+        run: |
+          lockfile=iosApp/NetKit.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+          test -s "$lockfile"
+          xcodebuild -resolvePackageDependencies -project iosApp/NetKit.xcodeproj -scheme NetKit \
+            -onlyUsePackageVersionsFromResolvedFile -disableAutomaticPackageResolution \
+            2>&1 | tee artifacts/ios/package-resolution.log
+          git diff --exit-code -- "$lockfile"
       - name: Build unsigned simulator app
         run: |
           xcodebuild -project iosApp/NetKit.xcodeproj -scheme NetKit \
@@ -100,6 +109,7 @@ jobs:
             -destination "platform=iOS Simulator,id=$IOS_SIMULATOR_ID" \
             -derivedDataPath build/ios-derived \
             -resultBundlePath artifacts/ios/build.xcresult \
+            -onlyUsePackageVersionsFromResolvedFile -disableAutomaticPackageResolution \
             CODE_SIGNING_ALLOWED=NO build 2>&1 | tee artifacts/ios/build.log
       - name: Swift local transport integration and localized launch tests
         run: |
@@ -109,7 +119,9 @@ jobs:
             -destination-timeout 120 -parallel-testing-enabled NO \
             -derivedDataPath build/ios-derived \
             -resultBundlePath artifacts/ios/tests.xcresult \
+            -onlyUsePackageVersionsFromResolvedFile -disableAutomaticPackageResolution \
             CODE_SIGNING_ALLOWED=NO test 2>&1 | tee artifacts/ios/tests.log
+          git diff --exit-code -- iosApp/NetKit.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:

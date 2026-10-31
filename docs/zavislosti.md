@@ -540,3 +540,46 @@ implementace nad veřejným API, bez přibalení či kopírování cizího síť
 URLSession HTTPS/WSS a existující sdílené parsery; neposkytuje ani nevyžaduje placenou službu.
 Runner, Xcode, SHA akcí a Linux build se kvůli P1 nemění. Skutečný stav ověření je v
 [ios.md §9](ios.md#9-síťové-nástroje--p1-implementace-čeká-macos-ci).
+
+
+## 8. iOS SSH (P2, ověřeno 2026-10-31)
+
+SwiftNIO SSH je oficiální SSH protokolová knihovna; aplikace doplňuje životní cyklus, TOFU,
+Keychain a PTY. Přímé i tranzitivní balíčky mají v Xcode `exactVersion`; commitnutý
+`iosApp/NetKit.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved` obsahuje
+verze a revize ze stejných tagů. CI vyžaduje pinované řešení bez automatické aktualizace.
+SwiftPM/Xcode resolve na Linuxu neproběhl; kompatibilitu grafu a sestavení potvrzuje macOS CI.
+
+| Balíček | Verze | Licence | Zdroj na přesném tagu | Datum ověření |
+|---|---|---|---|---|
+| `swift-nio-ssh` | 0.15.1 | Apache-2.0 | [LICENSE.txt](https://github.com/apple/swift-nio-ssh/blob/0.15.1/LICENSE.txt), [Package.swift](https://github.com/apple/swift-nio-ssh/blob/0.15.1/Package.swift) | 2026-10-31 |
+| `swift-nio` | 2.84.0 | Apache-2.0 | [LICENSE.txt](https://github.com/apple/swift-nio/blob/2.84.0/LICENSE.txt), [Package.swift](https://github.com/apple/swift-nio/blob/2.84.0/Package.swift) | 2026-10-31 |
+| `swift-crypto` | 3.12.3 | Apache-2.0 | [LICENSE.txt](https://github.com/apple/swift-crypto/blob/3.12.3/LICENSE.txt), [Package.swift](https://github.com/apple/swift-crypto/blob/3.12.3/Package.swift) | 2026-10-31 |
+| `swift-atomics` | 1.3.0 | Apache-2.0 | [LICENSE.txt](https://github.com/apple/swift-atomics/blob/1.3.0/LICENSE.txt), [Package.swift](https://github.com/apple/swift-atomics/blob/1.3.0/Package.swift) | 2026-10-31 |
+| `swift-collections` | 1.2.0 | Apache-2.0 | [LICENSE.txt](https://github.com/apple/swift-collections/blob/1.2.0/LICENSE.txt), [Package.swift](https://github.com/apple/swift-collections/blob/1.2.0/Package.swift) | 2026-10-31 |
+| `swift-system` | 1.5.0 | Apache-2.0 | [LICENSE.txt](https://github.com/apple/swift-system/blob/1.5.0/LICENSE.txt), [Package.swift](https://github.com/apple/swift-system/blob/1.5.0/Package.swift) | 2026-10-31 |
+| `swift-asn1` | 1.4.0 | Apache-2.0 | [LICENSE.txt](https://github.com/apple/swift-asn1/blob/1.4.0/LICENSE.txt), [Package.swift](https://github.com/apple/swift-asn1/blob/1.4.0/Package.swift) | 2026-10-31 |
+
+Graf: NIOSSH → NIO, Crypto, Atomics; NIO → Atomics, Collections, System; Crypto → ASN1.
+ASN1 se řeší z manifestu Crypto i přesto, že iOS aplikace používá pouze produkt `Crypto`,
+nikoli `_CryptoExtras`. `Crypto` na Apple platformě v této konfiguraci exportuje systémový
+CryptoKit; nevynucujeme BoringSSL backend. NIO obsahuje také MIT llhttp, ale produkt NIOHTTP1
+ani jeho CNIOLLHTTP target tato aplikace nepoužívá. Žádný kód závislostí se nekopíruje do aplikace.
+
+NIOSSH 0.15.1 vyžaduje Swift tools 6.1 (Xcode 16.4); ostatní manifesty nejvýše 5.10.
+Použitelná sada algoritmů je bezpečná podmnožina sdíleného allowlistu: Ed25519 a ECDSA
+P-256/P-384/P-521, ECDH těchto křivek a Curve25519, AES-128/256-GCM. Pořadí preference KEX
+se liší od Androidu. RSA autentizace a RSA host keys nejsou v této knihovně podporovány;
+žádné RSA/SHA-1, DSA ani jiný slabý fallback se nepřidává. PTY a změna velikosti jsou
+součástí NIOSSH channel requests; vlastní vykreslení používá sdílený TerminalBuffer.
+
+Citadel 0.12.1 nebyl přidán: kořenová MIT licence nepokrývá povinný
+[CCitadelBcrypt/bcrypt.c](https://github.com/orlandos-nl/Citadel/blob/0.12.1/Sources/CCitadelBcrypt/bcrypt.c)
+pod ISC (zde není povolená výjimka). Jeho
+[RSA.swift](https://github.com/orlandos-nl/Citadel/blob/0.12.1/Sources/Citadel/Algorithms/RSA.swift)
+navíc používá podpis SSH-RSA/SHA-1, který společná politika odmítá. Nejde o kompromis
+s bezpečností výměnou za širší kompatibilitu. Stav ověření aplikace je v [ios.md](ios.md).
+
+Licence Atomics, Collections a System zahrnují Runtime Library Exception k Apache-2.0.
+NIO NOTICE dále uvádí MIT cpp_magic.h a BSD-3-Clause části FreeBSD; tyto permisivní
+licence byly zkontrolovány v tagu 2.84.0 spolu s [NOTICE](https://github.com/apple/swift-nio/blob/2.84.0/NOTICE.txt).

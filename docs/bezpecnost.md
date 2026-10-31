@@ -578,3 +578,35 @@ Android pravidla výše se nemění. iOS používá SwiftUI a platformní síťo
 Zdroje ověřené 2026-10-31: [Apple TN3179](https://developer.apple.com/documentation/technotes/tn3179-understanding-local-network-privacy),
 [Wi-Fi fetchCurrent](https://developer.apple.com/documentation/networkextension/nehotspotnetwork/fetchcurrent(completionhandler:)),
 [M-Lab NDT](https://www.measurementlab.net/tests/ndt/index.html).
+
+
+## iOS SSH (P2, 2026-10-31)
+
+- `KeychainSecrets` ukládá hesla a raw Ed25519 privátní klíče jako generic-password položky,
+  oddělené service/account, se synchronizací vypnutou a
+  `kSecAttrAccessibleWhenUnlockedThisDeviceOnly`. Identifikátory a limit 256 KiB kontroluje
+  také iOS adaptér společného `SecretStore`. Jen not-found znamená chybějící tajemství;
+  zamčené nebo nedostupné úložiště nezpůsobí plaintext fallback. Pracovní kopie jsou dočasně
+  v paměti Swift/Kotlin/knihovny; negarantujeme vymazání všech jejich kopií.
+- Profily, veřejné klíče a důvěra jsou v app-private `ssh.json`, nikoli tajemství. Soubor je
+  atomický, s complete file protection a v adresáři vyloučeném ze záloh. Vadný/novější obsah
+  ani IO chyba se nepřepíší prázdnou databází. Import používá sdílené limity a compare-before-apply.
+- Host key se ověřuje před předáním uživatelské autentizace. SHA256 otisk se počítá z raw SSH blobu;
+  důvěra porovnává algoritmus, veřejný klíč a přesný normalizovaný endpoint. Unknown confirmation
+  používá jednorázovou bránu s náhodným ID a atomický compare-and-insert. Changed je vždy odmítnut;
+  potvrzovací callback jej nemůže povolit. Reset důvěry vyžaduje zvláštní potvrzení a zavření relace.
+- Oficiální NIOSSH v připnuté verzi nabízí jen bezpečnou podmnožinu společné politiky. RSA/SHA-1,
+  DSA ani staré šifry se nepřidávají pro kompatibilitu. SSH nevypíná VPN a používá systémovou trasu.
+  Časové limity a rušení uzavírají transport; fronta zápisů a přenos na UI mají pevné limity.
+- Schránka terminálu používá `UIPasteboard` s `localOnly`, expirací 60 s a podmíněným vyčištěním,
+  jen pokud se obsah od kopie nezměnil. Omezuje sdílení mezi zařízeními a životnost, nezaručuje
+  ochranu před vložením nebo čtením oprávněnou aplikací. Vkládání řídicích znaků je potvrzené a
+  sanitizované sdílenou funkcí; paste není alternativní cesta k Enter/ESC sekvencím.
+- Žádná SSH tajemství, privátní klíče, autentizační prompty, příkazy ani terminálový výstup se
+  nelogují. Testy používají pouze za běhu generované klíče/hesla a loopback SSH server. Nové
+  entitlementy ani oprávnění se kvůli SSH nepřidávají.
+
+Zdroje: [Keychain accessibility](https://developer.apple.com/documentation/security/ksecattraccessiblewhenunlockedthisdeviceonly),
+[schránka localOnly](https://developer.apple.com/documentation/uikit/uipasteboard/optionskey/localonly),
+[NIOSSH 0.15.1](https://github.com/apple/swift-nio-ssh/tree/0.15.1).
+Stav testů a omezení jsou v [ios.md §10](ios.md#10-ssh-klient-a-terminál-p2-2026-10-31).

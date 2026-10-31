@@ -2,7 +2,8 @@
 
 **Stav 2026-10-31:** P0 ověřena v ARM simulátoru — SwiftUI nad `:shared`, link, build, Kotlin/Native,
 XCTest bridge a CS/EN UI testy prošly v [CI 41219799892](https://github.com/Losminek/netkit-ios/actions/runs/41219799892).
-Aktuální implementaci a omezení popisují §8–9.
+P1 prošla v [CI 41236666699](https://github.com/Losminek/netkit-ios/actions/runs/41236666699).
+Aktuální implementaci a omezení včetně P2 čekající na CI popisují §8–10.
 Níže původní analýza z 2026-10-27 (D12) a v §7 ověření
 buildu bez Macu. Údaje označené „ověřit“ je nutné potvrdit v oficiální dokumentaci Applu
 v době, kdy se o iOS bude rozhodovat. Údaje v §6 byly ověřeny 2026-10-27; **[P]** = prokázáno
@@ -180,7 +181,7 @@ Linuxové spuštění s přepínačem není důkazem Apple linkování. Před da
 
 ### Dosud neimplementováno a neověřeno
 
-Síťové funkce P1 popisuje §9. SSH, Keychain a terminál UI jsou další fáze.
+Síťové funkce P1 popisuje §9. Implementaci SSH, Keychainu a terminálu P2 popisuje §10.
 iOS nemá Wi-Fi scan okolí ani graf kanálů; ty nejsou plánovány.
 P0 bridge, linkování a lokalizované UI testy potvrdil běh CI uvedený v úvodu. To neověřuje
 síťové transporty P1 ani chování na zařízení.
@@ -252,3 +253,55 @@ Ověřené oficiální zdroje (2026-10-31):
 - [NEHotspotNetwork.fetchCurrent](https://developer.apple.com/documentation/networkextension/nehotspotnetwork/fetchcurrent(completionhandler:)): podmínky údajů o aktuální Wi-Fi.
 - [Apple privacy API reasons](https://developer.apple.com/documentation/bundleresources/app-privacy-configuration/nsprivacyaccessedapitypes/nsprivacyaccessedapitype): důvod pro intervalové měření.
 - [M-Lab NDT](https://www.measurementlab.net/tests/ndt/index.html) a [Apple privacy details](https://developer.apple.com/app-store/app-privacy-details/): předávaná IP, výsledky a deklarace sběru.
+
+
+## 10. SSH klient a terminál (P2, 2026-10-31)
+
+P1 je ověřena v simulátoru: [CI 41236666699](https://github.com/Losminek/netkit-ios/actions/runs/41236666699),
+Linux i macOS PASS, XCTest 30/30, UI 3/3 a Kotlin/Native testy PASS.
+P2 je implementační řez čekající na první macOS CI; lokální Linux ověřuje přenosné Kotlin
+bridge testy, nikoli Swift typecheck, Apple linker nebo skutečný Keychain simulátoru.
+
+- SwiftUI obrazovka SSH umožňuje uložit/upravit profil, přihlásit se heslem nebo v aplikaci
+  vygenerovaným Ed25519 klíčem, otevřít PTY shell a relaci zavřít. Veřejný OpenSSH klíč lze
+  zkopírovat pro registraci na vlastním serveru. Tajemství jsou pouze v Keychainu.
+- Používá oficiální SwiftNIO SSH 0.15.1; přesné přímé i tranzitivní verze a licence jsou
+  v [zavislosti.md §8](zavislosti.md#8-ios-ssh-p2-ověřeno-2026-10-31). Podporovaná kryptografická
+  sada je podmnožinou Android allowlistu, bez slabšího fallbacku.
+- TOFU před autentizací ukáže endpoint, algoritmus a SHA256 otisk z SSH veřejného blobu.
+  První klíč vyžaduje výslovné potvrzení; jiný již uložený klíč je odmítnut a UI ukáže varování.
+  Reset důvěry je samostatně potvrzená akce a zavře aktivní relaci. Pozdní odpověď na zrušenou
+  či vypršelou výzvu nemůže potvrdit další spojení. Metadata se ukládají atomicky a bez záloh.
+- JSON import profilů používá `SshProfileImport`, maximálně 256 KiB a hloubku JSON 16,
+  náhled přidaných/změněných/přeskočených položek a potvrzení. Změna hosta/portu/uživatele
+  odpojí uložené heslo; import nepřenáší tajemství ani důvěru k serverům.
+- Vykreslení používá shared `TerminalBuffer`, vstup `TerminalInput` a `TerminalComposition`.
+  Zachovává VT subset, barvy, bold, kurzor a změnu velikosti PTY. Klávesnice má Ctrl, Esc a šipky;
+  vložení řídicích znaků se potvrzuje a sanitizuje. Neimplementuje OSC schránku, odkazy ani obrázky.
+- Kopie terminálu je lokální schránka s expirací 60 s; podrobnosti a meze v bezpečnostní dokumentaci.
+  Terminál ani příkazy se nezapisují do souboru nebo logu. Příchozí a odchozí fronty jsou omezené.
+- Jedna aktivní relace používá systémovou trasu včetně VPN. Pozadí má stejnou pětiminutovou
+  ochrannou lhůtu jako sdílená politika, ale iOS může proces pozastavit nebo ukončit; není
+  zapnutý background mode a aplikace neslibuje trvalé SSH na pozadí.
+
+Omezení P2: RSA host/user klíče, import cizích privátních klíčů, keyboard-interactive,
+SFTP/tunely, automatické startup příkazy a keepalive nejsou implementovány. Metadata startupCommand
+/keepaliveSeconds se zachovají, ale transport je neprovádí. Generované privátní klíče se neexportují.
+Po nahrazení přihlašovacího údaje může v Keychainu zůstat neodkazovaná stará položka; bezpečné
+odstraňování se sdílenými referencemi není v P2. Tato omezení nezavádějí slabší autentizaci.
+
+XCTest používají skutečný NIOSSH server pouze na 127.0.0.1, runtime generované host/user klíče
+a heslo, bez spouštění příkazů hostitele. Prověřují password/key auth, TOFU před autentizací,
+změnu host key, zrušení/pozdní potvrzení, Keychain a sdílený terminál. UI smoke přidává prázdný
+stav SSH; přesný výsledek P2 se doplní po CI. Dosavadní síťové testy se nevypínají.
+
+**Export compliance před distribucí:** SSH přidává do aplikace vlastní protokolovou vrstvu
+s kryptografií, i když matematické primitivy na iOS poskytuje CryptoKit. Hodnota
+`ITSAppUsesNonExemptEncryption` a případné podklady se rozhodnou před distribucí;
+P2 ji nenastavuje a nečiní právní závěr o výjimce. Zdrojem postupu je
+[Apple export compliance](https://developer.apple.com/help/app-store-connect/manage-app-information/overview-of-export-compliance/)
+(ověřeno 2026-10-31). Apple účet, podepisování pro zařízení, TestFlight a App Store zůstávají mimo rozsah.
+
+Na zařízení zbývá ověřit zamčený Keychain, pozastavení/ukončení aplikace, změnu síťové cesty,
+VPN a Wi-Fi/mobilní přechod, IME/hardwarovou klávesnici a skutečné chování schránky/Universal Clipboard.
+Simulátor tato ověření nenahrazuje.

@@ -22,8 +22,22 @@ final class NetKitUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Current Wi-Fi details are unavailable. The system requires the appropriate entitlement and access conditions."].waitForExistence(timeout: 10))
         app.tabBars.buttons["Speed"].tap()
         XCTAssertTrue(app.buttons["Start measurement"].waitForExistence(timeout: 10))
-        app.tabBars.buttons["Wake-on-LAN"].tap()
+        if app.tabBars.buttons["Wake-on-LAN"].exists { app.tabBars.buttons["Wake-on-LAN"].tap() }
+        else {
+            app.tabBars.buttons["More"].tap()
+            app.tables.cells["Wake-on-LAN"].tap()
+        }
         XCTAssertTrue(app.buttons["Save profile"].waitForExistence(timeout: 10))
+    }
+
+    func testSshEmptyState() {
+        let app = XCUIApplication()
+        app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launch()
+        if app.tabBars.buttons["SSH"].exists { app.tabBars.buttons["SSH"].tap() }
+        else { app.tabBars.buttons["More"].tap(); app.tables.cells["SSH"].tap() }
+        XCTAssertTrue(app.buttons["Add profile"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["No SSH profiles yet."].exists)
     }
 
     private func assertLaunch(language: String, locale: String, versionLabel: String, sharedLabel: String) throws {
