@@ -15,9 +15,18 @@ struct ContentView: View {
     var body: some View {
         VStack(spacing: 16) {
             Text("app.title").font(.largeTitle).bold()
-            LabeledContent("app.version", value: version)
-            LabeledContent("shared.ipv4", value: address)
-                .accessibilityIdentifier("sharedIPv4")
+            HStack {
+                Text("app.version")
+                Spacer()
+                Text(verbatim: version).accessibilityIdentifier("appVersionValue")
+            }
+            .accessibilityElement(children: .contain)
+            HStack {
+                Text("shared.ipv4")
+                Spacer()
+                Text(verbatim: address).accessibilityIdentifier("sharedIPv4Value")
+            }
+            .accessibilityElement(children: .contain)
         }
         .padding()
     }
