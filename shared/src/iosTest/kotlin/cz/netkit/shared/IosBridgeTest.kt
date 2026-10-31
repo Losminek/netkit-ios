@@ -41,7 +41,7 @@ class IosBridgeTest {
         assertEquals("https://localhost/", domain.libreServer("localhost")?.baseUrl)
         assertEquals(emptyList(), domain.ndtTargets("{}"))
         assertNull(domain.ndtView("not-json", true))
-        val trace = domain.newTrace()
+        val trace = domain.createTrace()
         for (time in 250L..10_000L step 250) assertTrue(trace.add(time, time * 1_000))
         assertEquals(8.0, assertNotNull(domain.summarize(trace)).mbps)
     }

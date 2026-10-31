@@ -171,7 +171,7 @@ final class LibreSpeedClient {
 
     private func phase(base: String, download: Bool, payload: Data) async throws -> Double {
         let counter = SpeedCounter()
-        let trace = domain.newTrace()
+        let trace = domain.createTrace()
         let start = ProcessInfo.processInfo.systemUptime
         let streamCount = download ? 6 : 3
         try await withThrowingTaskGroup(of: Void.self) { group in
@@ -323,7 +323,7 @@ final class Ndt7Client {
         defer { socket.close() }
         try await socket.open()
         let counter = SpeedCounter()
-        let trace = domain.newTrace()
+        let trace = domain.createTrace()
         let start = ProcessInfo.processInfo.systemUptime
         let reader = Task {
             do {
@@ -351,7 +351,7 @@ final class Ndt7Client {
         }
         let writer = Task {
             guard !download else { return }
-            let sizer = self.domain.newMessageSizer()
+            let sizer = self.domain.createMessageSizer()
             do {
                 while !Task.isCancelled && ProcessInfo.processInfo.systemUptime - start < self.duration {
                     let size = Int(sizer.size)
