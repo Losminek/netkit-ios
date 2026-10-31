@@ -1,3 +1,4 @@
+@testable import NetKit
 import Foundation
 import CryptoKit
 import NIOSSH

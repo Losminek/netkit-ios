@@ -1,3 +1,4 @@
+@testable import NetKit
 import NetKitShared
 import XCTest
 import UIKit

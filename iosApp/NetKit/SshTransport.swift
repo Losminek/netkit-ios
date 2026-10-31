@@ -73,10 +73,12 @@ final class SshTransport {
         DispatchQueue.main.asyncAfter(deadline: .now() + 600, execute: timeout)
         let bootstrap = ClientBootstrap(group: group)
             .connectTimeout(.seconds(15))
-            .channelInitializer { [auth, validator] channel in
+            .channelInitializer { [weak self, auth, validator] channel in
                 let handler = NIOSSHHandler(role: .client(.init(userAuthDelegate: auth, serverAuthDelegate: validator)),
                                            allocator: channel.allocator, inboundChildChannelInitializer: nil)
-                return channel.pipeline.addHandler(handler)
+                return channel.pipeline.addHandler(handler).flatMap {
+                    channel.pipeline.addHandler(SshParentErrorHandler { [weak self] in self?.fail() })
+                }
             }
         bootstrap.connect(host: host, port: port).whenComplete { [weak self] result in
             guard let self else { if case .success(let channel) = result { channel.close(promise: nil) }; return }
@@ -186,6 +188,17 @@ final class SshTransport {
             }
             self.state(value)
         }
+    }
+}
+
+/// Errors before child-channel creation must close the parent and report failure.
+private final class SshParentErrorHandler: ChannelInboundHandler {
+    typealias InboundIn = Any
+    private let failed: () -> Void
+    init(failed: @escaping () -> Void) { self.failed = failed }
+    func errorCaught(context: ChannelHandlerContext, error: Error) {
+        failed()
+        context.close(promise: nil)
     }
 }
 

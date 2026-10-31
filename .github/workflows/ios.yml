@@ -102,7 +102,7 @@ jobs:
             -onlyUsePackageVersionsFromResolvedFile -disableAutomaticPackageResolution \
             2>&1 | tee artifacts/ios/package-resolution.log
           git diff --exit-code -- "$lockfile"
-      - name: Build unsigned simulator app
+      - name: Build simulator app with local ad-hoc signing
         run: |
           xcodebuild -project iosApp/NetKit.xcodeproj -scheme NetKit \
             -configuration Debug -sdk iphonesimulator \
@@ -110,7 +110,8 @@ jobs:
             -derivedDataPath build/ios-derived \
             -resultBundlePath artifacts/ios/build.xcresult \
             -onlyUsePackageVersionsFromResolvedFile -disableAutomaticPackageResolution \
-            CODE_SIGNING_ALLOWED=NO build 2>&1 | tee artifacts/ios/build.log
+            CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=YES \
+            build 2>&1 | tee artifacts/ios/build.log
       - name: Swift local transport integration and localized launch tests
         run: |
           xcodebuild -project iosApp/NetKit.xcodeproj -scheme NetKit \
@@ -120,8 +121,41 @@ jobs:
             -derivedDataPath build/ios-derived \
             -resultBundlePath artifacts/ios/tests.xcresult \
             -onlyUsePackageVersionsFromResolvedFile -disableAutomaticPackageResolution \
-            CODE_SIGNING_ALLOWED=NO test 2>&1 | tee artifacts/ios/tests.log
+            CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=YES \
+            test 2>&1 | tee artifacts/ios/tests.log
           git diff --exit-code -- iosApp/NetKit.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+      - name: Inspect local simulator signatures and entitlements
+        if: always()
+        run: |
+          products=build/ios-derived/Build/Products/Debug-iphonesimulator
+          mkdir -p artifacts/ios
+          : > artifacts/ios/defined-symbols.log
+          {
+            if [ -d "$products" ]; then
+              while IFS= read -r -d '' bundle; do
+                printf '\nBundle: %s\n' "$bundle"
+                if ! codesign --display --verbose=4 --entitlements - "$bundle" 2>&1; then
+                  printf 'Signature inspection failed for this bundle.\n'
+                fi
+                printf '\nBundle: %s\n' "$bundle" >> artifacts/ios/defined-symbols.log
+                if executable=$(plutil -extract CFBundleExecutable raw -o - "$bundle/Info.plist" 2>> artifacts/ios/defined-symbols.log); then
+                  case "$executable" in
+                    '' | */*) printf 'Invalid bundle executable name; symbol inspection skipped.\n' >> artifacts/ios/defined-symbols.log ;;
+                    *)
+                      if ! nm -gU "$bundle/$executable" >> artifacts/ios/defined-symbols.log 2>&1; then
+                        printf 'Defined-symbol inspection failed for this executable.\n' >> artifacts/ios/defined-symbols.log
+                      fi
+                      ;;
+                  esac
+                else
+                  printf 'Bundle executable name unavailable; symbol inspection skipped.\n' >> artifacts/ios/defined-symbols.log
+                fi
+              done < <(find "$products" -type d \( -name '*.app' -o -name '*.xctest' \) -print0)
+            else
+              printf 'No simulator build products available for signature inspection.\n'
+              printf 'No simulator build products available for symbol inspection.\n' >> artifacts/ios/defined-symbols.log
+            fi
+          } | tee artifacts/ios/signatures.log
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:

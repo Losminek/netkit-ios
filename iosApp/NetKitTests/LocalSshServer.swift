@@ -1,3 +1,4 @@
+@testable import NetKit
 import Foundation
 import Darwin
 import Crypto

@@ -1,3 +1,4 @@
+@testable import NetKit
 import XCTest
 import Foundation
 import CryptoKit
@@ -9,6 +10,44 @@ private final class PendingSshApproval {
     private var callback: ((Bool) -> Void)?
     func set(_ callback: @escaping (Bool) -> Void) { lock.lock(); self.callback = callback; lock.unlock() }
     func accept() { lock.lock(); let callback = self.callback; self.callback = nil; lock.unlock(); callback?(true) }
+}
+
+private final class SshTestDiagnostics {
+    private let lock = NSLock()
+    private var events: [String] = []
+
+    func recordState(_ state: SshTransport.State) {
+        let name: String
+        switch state {
+        case .connected: name = "state.connected"
+        case .closed: name = "state.closed"
+        case .failed: name = "state.failed"
+        }
+        append(name)
+    }
+
+    func recordUnexpectedPrompt() { append("validator.unexpectedPrompt") }
+
+    func recordFailure(_ failure: SshHostKeyValidator.Failure) {
+        let name: String
+        switch failure {
+        case .invalid: name = "validator.invalid"
+        case .changed: name = "validator.changed"
+        case .rejected: name = "validator.rejected"
+        case .storage: name = "validator.storage"
+        case .cancelled: name = "validator.cancelled"
+        case .timeout: name = "validator.timeout"
+        }
+        append(name)
+    }
+
+    private func append(_ event: String) {
+        lock.lock(); events.append(event); lock.unlock()
+    }
+    func snapshot() -> [String] {
+        lock.lock(); defer { lock.unlock() }
+        return events
+    }
 }
 
 final class SshIntegrationTests: XCTestCase {
@@ -121,18 +160,29 @@ final class SshIntegrationTests: XCTestCase {
         unexpectedPrompt.isInverted = true
         let failed = expectation(description: "changed key is rejected")
         let changedWarning = expectation(description: "typed changed host-key warning")
+        let diagnostics = SshTestDiagnostics()
         let changedValidator = SshHostKeyValidator(endpoint: "127.0.0.1:\(port)", store: metadata, onFailure: { failure in
+            diagnostics.recordFailure(failure)
             if case .changed = failure { changedWarning.fulfill() }
         }) { _, _, _, reply in
+            diagnostics.recordUnexpectedPrompt()
             unexpectedPrompt.fulfill(); reply(true)
         }
         let retry = try SshTransport(host: "127.0.0.1", port: port, username: changed.username,
                                      credential: .password(changed.password), validator: changedValidator,
-                                     output: { _ in }, state: { if case .failed = $0 { failed.fulfill() } })
+                                     output: { _ in }, state: { state in
+                                         diagnostics.recordState(state)
+                                         if case .failed = state { failed.fulfill() }
+                                     })
         addTeardownBlock { retry.close() }
         retry.start()
         await fulfillment(of: [failed, changedWarning], timeout: 15)
         await fulfillment(of: [unexpectedPrompt], timeout: 1)
+        let events = diagnostics.snapshot()
+        if !events.contains("state.failed") || !events.contains("validator.changed") || events.contains("validator.unexpectedPrompt") ||
+            changed.authSuccesses != 0 || changed.ptyRequests != 0 || changed.shellRequests != 0 {
+            print("SSH_DIAGNOSTICS events=[\(events.joined(separator: ", "))] auth=\(changed.authSuccesses) pty=\(changed.ptyRequests) shell=\(changed.shellRequests)")
+        }
         XCTAssertEqual(changed.authSuccesses, 0)
         XCTAssertEqual(changed.ptyRequests, 0)
         XCTAssertEqual(changed.shellRequests, 0)

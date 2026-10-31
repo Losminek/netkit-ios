@@ -160,7 +160,10 @@ Workflow [ios.yml](../.github/workflows/ios.yml) má samostatný Linux job pro A
 a macOS job pro ARM simulátor. Verze toolchainu a jejich zdroje jsou v
 [závislostech](zavislosti.md#6-ios-kostra-a-ci-p0-2026-10-31).
 macOS job kontroluje existenci binárky, hlavičky a module map frameworku; pouhý úspěšný Gradle
-příkaz nestačí. Následují `xcodebuild build` a `xcodebuild test` bez podpisu.
+příkaz nestačí. Následují `xcodebuild build` a `xcodebuild test`; od opravy P2 3/3 používají
+lokální ad-hoc podpis simulátoru (`CODE_SIGN_IDENTITY=-`) kvůli Keychain testům.
+Tato [pseudoidentita nevyžaduje certifikát](https://developer.apple.com/library/archive/documentation/Security/Conceptual/CodeSigningGuide/RequirementLang/RequirementLang.html),
+Apple účet, vývojový tým ani provisioning profil. Nejde o podpis pro distribuci či zařízení.
 Logy a `.xcresult` se ukládají jako artefakt `ios-simulator-results` i při neúspěchu.
 
 Na macOS lze pro simulátor spustit:
@@ -171,7 +174,7 @@ Na macOS lze pro simulátor spustit:
 xcodebuild -project iosApp/NetKit.xcodeproj -scheme NetKit \
   -configuration Debug -sdk iphonesimulator \
   -destination 'platform=iOS Simulator,name=iPhone 16,OS=18.5' \
-  CODE_SIGNING_ALLOWED=NO build test
+  CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=YES build test
 ```
 
 Xcode projekt odkazuje přímo na framework odpovídající platformě a konfiguraci. Plný XCFramework
@@ -294,6 +297,13 @@ XCTest používají skutečný NIOSSH server pouze na 127.0.0.1, runtime generov
 a heslo, bez spouštění příkazů hostitele. Prověřují password/key auth, TOFU před autentizací,
 změnu host key, zrušení/pozdní potvrzení, Keychain a sdílený terminál. UI smoke přidává prázdný
 stav SSH; přesný výsledek P2 se doplní po CI. Dosavadní síťové testy se nevypínají.
+
+Od opravy P2 3/3 běží unit testy v hostitelské `NetKit.app` přes `TEST_HOST`/`BUNDLE_LOADER`,
+aby používaly oprávnění procesu aplikace. Test target obsahuje jen testy a fixture;
+aplikační typy zpřístupňuje `@testable import NetKit` s testability v Debug. NetKitShared
+linkuje aplikace; v test targetu je odstraněn explicitní link i autolink tohoto frameworku.
+Import jeho typů zachovává framework search paths. Přímé Swift Package produkty lokálního
+SSH test serveru zůstávají. Skutečné linkování a Keychain musí ověřit nový macOS běh.
 
 **Export compliance před distribucí:** SSH přidává do aplikace vlastní protokolovou vrstvu
 s kryptografií, i když matematické primitivy na iOS poskytuje CryptoKit. Hodnota
