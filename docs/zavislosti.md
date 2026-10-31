@@ -488,3 +488,42 @@ licence; nenahrazují kontrolu licencí v konkrétním release APK.
   nemají aplikační velikostní strop příchozí datové zprávy před callbackem.
   [`RealWebSocket.MAX_QUEUE_SIZE`](https://github.com/square/okhttp/blob/parent-5.3.2/okhttp/src/commonJvmAndroid/kotlin/okhttp3/internal/ws/RealWebSocket.kt#L411-L427)
   omezuje odchozí frontu. Dopad F4 a přesné rozlišení v reportu 30 (interní záznam).
+
+## 6. iOS kostra a CI (P0, 2026-10-31)
+
+P0 nepřidává přímou knihovnu ani Swift Package. SwiftUI, Foundation a XCTest jsou součástí
+Apple SDK používaného jen na macOS runneru. Stávající KMP závislosti nově vyžadují Apple varianty;
+Android/JVM verze a katalog se nemění. Licence knihoven byly ověřeny 2026-10-31:
+
+| Komponenta | Verze | Licence | Oficiální zdroj / účel |
+|---|---|---|---|
+| Kotlin/Native, stdlib a kotlin-test | 2.2.20 | Apache-2.0, soupis přibalených částí v licenci Kotlinu | [Kotlin licence](https://github.com/JetBrains/kotlin/blob/v2.2.20/license/README.md); existující Kotlin plugin, nově native targety |
+| kotlinx-coroutines-core, kotlinx-coroutines-test (iosarm64, iossimulatorarm64) | 1.10.2 | Apache-2.0 | [LICENSE](https://github.com/Kotlin/kotlinx.coroutines/blob/1.10.2/LICENSE.txt), [Maven core](https://repo.maven.apache.org/maven2/org/jetbrains/kotlinx/kotlinx-coroutines-core-iosarm64/1.10.2/); existující přímé závislosti |
+| kotlinx-serialization-core, kotlinx-serialization-json (iosarm64, iossimulatorarm64) | 1.9.0 | Apache-2.0 | [LICENSE](https://github.com/Kotlin/kotlinx.serialization/blob/v1.9.0/LICENSE.txt), [Maven JSON](https://repo.maven.apache.org/maven2/org/jetbrains/kotlinx/kotlinx-serialization-json-iosarm64/1.9.0/); existující JSON knihovna |
+| atomicfu, atomicfu-iosarm64, atomicfu-iossimulatorarm64 včetně cinterop | 0.26.1 | Apache-2.0 | [LICENSE](https://github.com/Kotlin/kotlinx-atomicfu/blob/0.26.1/LICENSE.txt), [POM](https://repo.maven.apache.org/maven2/org/jetbrains/kotlinx/atomicfu/0.26.1/atomicfu-0.26.1.pom); nová native tranzitivní závislost coroutines |
+
+SHA-256 Apple artefaktů a jejich metadat jsou doplněny do `gradle/verification-metadata.xml`.
+Získání z oficiálního Maven Central bylo porovnáno s publikovanými SHA-1 sidecary a u souborů
+odkazovaných z Gradle `.module` také s jejich SHA-256. Toto ověření stejného zdroje není nezávislý
+podpis vydavatele. Přísné ověřování zůstává zapnuté; úplnost grafu pro macOS musí potvrdit CI.
+Swift `Package.resolved` nevzniká, protože projekt nemá Swift balíčky.
+
+### Toolchain CI
+
+Ověřeno v oficiální dokumentaci 2026-10-31; nejde o výsledek spuštěného CI:
+
+| Součást | Zvolená verze | Zdroj |
+|---|---|---|
+| Standardní ARM runner | `macos-15`; dokumentovaný image `20261028.0489.1`, macOS 15.8.2 | [runner image](https://github.com/actions/runner-images/blob/main/images/macos/macos-15-arm64-Readme.md), [mapování labelů](https://docs.github.com/en/actions/reference/runners/github-hosted-runners) |
+| Xcode / iOS simulátor | 16.4, build 16F6 / iOS 18.5 | stejný runner image; [kompatibilita Kotlin 2.2.20](https://kotlinlang.org/docs/multiplatform/multiplatform-compatibility-guide.html) |
+| Linux / Java | `ubuntu-24.04` / Temurin 21 | stejné jako stávající release workflow |
+| GitHub Actions | checkout 7.0.1, setup-java 6.0.1, upload-artifact 7.0.2 | plné SHA převzaté beze změny z [release.yml](../.github/workflows/release.yml) |
+
+Workflow ověřuje architekturu a přesnou výchozí verzi Xcode; při změně image selže, nepřejde tiše
+na jinou verzi. Image jako celek není neměnně připnutý. Dokumentace runneru uvádí potřebný Android
+SDK 35 a build-tools 35.0.0; workflow neinstaluje SDK komponenty. Kotlin/Native toolchain se získává
+standardním Gradle mechanismem na macOS runneru, nikoli na lokálním Linuxu.
+Runner provisioning má [MIT licenci](https://github.com/actions/runner-images/blob/main/LICENSE);
+ta se nevztahuje na Apple SDK, pro které platí
+[Apple SDK agreement](https://www.apple.com/legal/sla/docs/xcode.pdf). SDK se nepřibaluje do repa.
+Distribuce aplikace ani posouzení SSH kryptografie nejsou součástí P0.

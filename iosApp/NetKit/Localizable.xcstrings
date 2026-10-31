@@ -1,0 +1,9 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "app.title" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "NetKit" } }, "en" : { "stringUnit" : { "state" : "translated", "value" : "NetKit" } } } },
+    "app.version" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "Verze" } }, "en" : { "stringUnit" : { "state" : "translated", "value" : "Version" } } } },
+    "shared.ipv4" : { "localizations" : { "cs" : { "stringUnit" : { "state" : "translated", "value" : "IPv4 ze sdíleného jádra" } }, "en" : { "stringUnit" : { "state" : "translated", "value" : "IPv4 from shared core" } } } }
+  },
+  "version" : "1.0"
+}

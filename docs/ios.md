@@ -1,7 +1,8 @@
 # NetKit — iOS analýza
 
-**Stav 2026-10-31:** **D28 znovu otevírá iOS** (SwiftUI nad `:shared`, MVP včetně SSH, vývoj ve veřejném
-`Losminek/netkit-ios`, zadání `prompty/28-ios-mvp.md`). Níže původní analýza z 2026-10-27 (D12) a v §7 ověření
+**Stav 2026-10-31:** připravena kostra P0 — SwiftUI nad `:shared`, sestavení a testy pro macOS CI;
+úspěšný běh v simulátoru zatím není doložen. Aktuální implementaci a omezení popisuje §8.
+Níže původní analýza z 2026-10-27 (D12) a v §7 ověření
 buildu bez Macu. Údaje označené „ověřit“ je nutné potvrdit v oficiální dokumentaci Applu
 v době, kdy se o iOS bude rozhodovat. Údaje v §6 byly ověřeny 2026-10-27; **[P]** = prokázáno
 zdrojem, **[O]** = odhad.
@@ -130,3 +131,62 @@ nebo SwiftUI nad `:shared`: stále odloženo (§4).
 | GitHub Actions macOS | standardní runnery ve **veřejném** repu zdarma; v soukromém repu z kreditu (Pro 18 USD/měs, macOS 0,062 USD/min) | **[P]** [GitHub Actions billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions) |
 
 Zvoleno (D28): vývoj ve veřejném `Losminek/netkit-ios`, build a testy v simulátoru na macOS runneru.
+
+## 8. Implementace SwiftUI — P0 (2026-10-31)
+
+Platná volba je **SwiftUI, iOS 17+**, nad Kotlin Multiplatform `:shared`. Historické odložení UI
+a podmínka Apple účtu v §4–6 již neplatí pro vývoj a simulátorové testy. Účet, podpis pro zařízení
+a distribuce nejsou součástí této fáze. Android aplikace ani její platformní implementace se nemění.
+
+### Co je připraveno
+
+- `shared/build.gradle.kts` deklaruje `iosArm64` a `iosSimulatorArm64` jen na macOS nebo při
+  `-Pnetkit.ios=true`. Obě varianty poskytují statický framework `NetKitShared` a úlohu
+  `:shared:assembleNetKitSharedDebugXCFramework`. Linux bez přepínače nadále deklaruje Android a JVM.
+- `iosApp/NetKit.xcodeproj`, sdílené schéma `NetKit`: jedna SwiftUI obrazovka zobrazuje verzi a
+  výsledek existujícího `WolDomainKt.parseIpv4`. Jde o lokální výpočet nad dokumentační adresou,
+  bez síťového provozu. `commonMain` se kvůli této kostře nemění.
+- CS/EN texty jsou v `Localizable.xcstrings`. `PrivacyInfo.xcprivacy` deklaruje žádné sledování,
+  sběr dat ani použití required-reason API v kostře. Síťová oprávnění, Bonjour služby a popis polohy
+  se doplní spolu s konkrétní funkcí; P0 je nevyžaduje ani nežádá.
+- Kotlin `iosTest` ověřuje parser a výpočet broadcastu bez soketu. XCTest volá skutečný sdílený parser;
+  UI testy spouštějí aplikaci v češtině a angličtině a kontrolují výsledek i verzi.
+
+### Sestavení a ověření
+
+Workflow [ios.yml](../.github/workflows/ios.yml) má samostatný Linux job pro Android/JVM regresi
+a macOS job pro ARM simulátor. Verze toolchainu a jejich zdroje jsou v
+[závislostech](zavislosti.md#6-ios-kostra-a-ci-p0-2026-10-31).
+macOS job kontroluje existenci binárky, hlavičky a module map frameworku; pouhý úspěšný Gradle
+příkaz nestačí. Následují `xcodebuild build` a `xcodebuild test` bez podpisu.
+Logy a `.xcresult` se ukládají jako artefakt `ios-simulator-results` i při neúspěchu.
+
+Na macOS lze pro simulátor spustit:
+
+```sh
+./gradlew --no-daemon --dependency-verification strict -Pnetkit.ios=true \
+  :shared:linkDebugFrameworkIosSimulatorArm64 :shared:iosSimulatorArm64Test
+xcodebuild -project iosApp/NetKit.xcodeproj -scheme NetKit \
+  -configuration Debug -sdk iphonesimulator \
+  -destination 'platform=iOS Simulator,name=iPhone 16,OS=18.5' \
+  CODE_SIGNING_ALLOWED=NO build test
+```
+
+Xcode projekt odkazuje přímo na framework odpovídající platformě a konfiguraci. Plný XCFramework
+(device + simulator) sestaví `:shared:assembleNetKitSharedDebugXCFramework` na macOS;
+CI P0 ověřuje pouze debug simulator slice. Release framework ani device slice zatím ověřeny nejsou.
+Linuxové spuštění s přepínačem není důkazem Apple linkování. Před další fází musí projít oba CI joby.
+
+### Dosud neimplementováno a neověřeno
+
+Síťové transporty, ping, DNS, mDNS, Wi-Fi info, speedtest, WoL odesílání, SSH, Keychain a terminál UI
+jsou další fáze. Kostra je nenahrazuje. iOS nemá Wi-Fi scan okolí ani graf kanálů; ty nejsou plánovány.
+Bez macOS CI není potvrzen Swift–Kotlin bridge, linkování ani spuštění testů v simulátoru.
+
+Později na fyzickém zařízení, nikoli v této fázi:
+
+- Local Network dialog: povolení umožní cílenou LAN operaci, odmítnutí zobrazí srozumitelný stav.
+- Wi-Fi info: bez entitlementu/polohy prázdný stav; s oprávněním údaje pouze o aktuální síti.
+- WoL: unicast na povolený cíl; broadcast až s oprávněným multicast entitlementem.
+- ICMP: datagramový ping v povolené síti, timeout a zrušení bez raw socketů.
+- Entitlementy: ověřit dostupnost před zařízením/distribucí, nepožadovat je kvůli CI simulátoru.
