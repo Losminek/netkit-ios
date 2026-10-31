@@ -3410,13 +3410,13 @@
          <artifact name="atomicfu-iosarm64-0.26.1.pom">
             <sha256 value="6df1164ec3190d3d4417fe7f8af7b8b37dde857a36f1a8e7617fd89351278345" origin="Maven Central; SHA-1 sidecar verified; SHA-256 calculated"/>
          </artifact>
-         <artifact name="atomicfu-iosarm64-0.26.1-cinterop-interop.klib">
+         <artifact name="atomicfu-cinterop-interop.klib">
             <sha256 value="4f9fad07dd900e0b48f62b747ae510e524a1ab3c63501cab55d84a368af47e6f" origin="Maven Central; SHA-1 sidecar verified; SHA-256 calculated"/>
          </artifact>
          <artifact name="atomicfu-iosarm64-0.26.1-metadata.jar">
             <sha256 value="2349a858d86e3b819081f7f6bb84fdc281f13c84fa8f2741daaba3c551978b46" origin="Maven Central; SHA-1 sidecar verified; SHA-256 calculated"/>
          </artifact>
-         <artifact name="atomicfu-iosarm64-0.26.1.klib">
+         <artifact name="atomicfu.klib">
             <sha256 value="b1b4615f6515a7ed6fe58ab9c129d0c5a66694d75a27dc2253f436ed4468e819" origin="Maven Central; SHA-1 sidecar verified; SHA-256 calculated"/>
          </artifact>
          <artifact name="atomicfu-iosarm64-0.26.1.module">
@@ -3427,13 +3427,13 @@
          <artifact name="atomicfu-iossimulatorarm64-0.26.1.pom">
             <sha256 value="9df71a01c3fb66815d2a70a0bb8a866976ad0c89ef4f9178515c31198089e003" origin="Maven Central; SHA-1 sidecar verified; SHA-256 calculated"/>
          </artifact>
-         <artifact name="atomicfu-iossimulatorarm64-0.26.1-cinterop-interop.klib">
+         <artifact name="atomicfu-cinterop-interop.klib">
             <sha256 value="97b7bbfb050b0a1618386d0de30ab35e144b0077d6eeb5dbdfe212c4d320e61f" origin="Maven Central; SHA-1 sidecar verified; SHA-256 calculated"/>
          </artifact>
          <artifact name="atomicfu-iossimulatorarm64-0.26.1-metadata.jar">
             <sha256 value="2349a858d86e3b819081f7f6bb84fdc281f13c84fa8f2741daaba3c551978b46" origin="Maven Central; SHA-1 sidecar verified; SHA-256 calculated"/>
          </artifact>
-         <artifact name="atomicfu-iossimulatorarm64-0.26.1.klib">
+         <artifact name="atomicfu.klib">
             <sha256 value="6af88eac3e6c92569bdc7cd2eb9d4a6e9fd83e288ad21461386e6e40fc8644cc" origin="Maven Central; SHA-1 sidecar verified; SHA-256 calculated"/>
          </artifact>
          <artifact name="atomicfu-iossimulatorarm64-0.26.1.module">
@@ -3447,7 +3447,7 @@
          <artifact name="kotlinx-coroutines-core-iosarm64-1.10.2-metadata.jar">
             <sha256 value="45d470ffb4df92d52e55a1a9fb979f329f0a1f86fbd180a29ce2b7a19a88b12d" origin="Maven Central; SHA-1 sidecar verified; SHA-256 calculated"/>
          </artifact>
-         <artifact name="kotlinx-coroutines-core-iosarm64-1.10.2.klib">
+         <artifact name="kotlinx-coroutines-core-iosArm64Main-1.10.2.klib">
             <sha256 value="ab366e02eafb48e7cfd94f3f57ba1e7c3593fcb8bd347d8f364e46efe84ba173" origin="Maven Central; SHA-1 sidecar verified; SHA-256 calculated"/>
          </artifact>
          <artifact name="kotlinx-coroutines-core-iosarm64-1.10.2.module">
@@ -3461,7 +3461,7 @@
          <artifact name="kotlinx-coroutines-core-iossimulatorarm64-1.10.2-metadata.jar">
             <sha256 value="45d470ffb4df92d52e55a1a9fb979f329f0a1f86fbd180a29ce2b7a19a88b12d" origin="Maven Central; SHA-1 sidecar verified; SHA-256 calculated"/>
          </artifact>
-         <artifact name="kotlinx-coroutines-core-iossimulatorarm64-1.10.2.klib">
+         <artifact name="kotlinx-coroutines-core-iosSimulatorArm64Main-1.10.2.klib">
             <sha256 value="d4d751fac309d442688b03ecf4bc7fe63cbb7c2d9f6eee42e468733837a98beb" origin="Maven Central; SHA-1 sidecar verified; SHA-256 calculated"/>
          </artifact>
          <artifact name="kotlinx-coroutines-core-iossimulatorarm64-1.10.2.module">
@@ -3475,7 +3475,7 @@
          <artifact name="kotlinx-coroutines-test-iosarm64-1.10.2-metadata.jar">
             <sha256 value="a5357dbcae1319b9cb97d330f6471ac74ce0e7da3adc470683d1666af18300a9" origin="Maven Central; SHA-1 sidecar verified; SHA-256 calculated"/>
          </artifact>
-         <artifact name="kotlinx-coroutines-test-iosarm64-1.10.2.klib">
+         <artifact name="kotlinx-coroutines-test-iosArm64Main-1.10.2.klib">
             <sha256 value="b75163d4c6acd3c74afb16ed07c70b4585483ce9d0757d600ba7847dc0e0bed1" origin="Maven Central; SHA-1 sidecar verified; SHA-256 calculated"/>
          </artifact>
          <artifact name="kotlinx-coroutines-test-iosarm64-1.10.2.module">
@@ -3489,7 +3489,7 @@
          <artifact name="kotlinx-coroutines-test-iossimulatorarm64-1.10.2-metadata.jar">
             <sha256 value="a5357dbcae1319b9cb97d330f6471ac74ce0e7da3adc470683d1666af18300a9" origin="Maven Central; SHA-1 sidecar verified; SHA-256 calculated"/>
          </artifact>
-         <artifact name="kotlinx-coroutines-test-iossimulatorarm64-1.10.2.klib">
+         <artifact name="kotlinx-coroutines-test-iosSimulatorArm64Main-1.10.2.klib">
             <sha256 value="81256c4b5b68090f8a3c49ceb566ea94d6070600746e3d7a956c3010c433dabf" origin="Maven Central; SHA-1 sidecar verified; SHA-256 calculated"/>
          </artifact>
          <artifact name="kotlinx-coroutines-test-iossimulatorarm64-1.10.2.module">
@@ -3503,7 +3503,7 @@
          <artifact name="kotlinx-serialization-core-iosarm64-1.9.0-metadata.jar">
             <sha256 value="8d37ffc3f8573ad2b2934e41dc09f0a7d9bce4b9b89d091cc0addc261f337fb9" origin="Maven Central; SHA-1 sidecar verified; SHA-256 calculated"/>
          </artifact>
-         <artifact name="kotlinx-serialization-core-iosarm64-1.9.0.klib">
+         <artifact name="kotlinx-serialization-core-iosArm64Main-1.9.0.klib">
             <sha256 value="7dbdb88a32cfdfd829a96ef69414982102f0396fd5a2cd73e2143801bb35e35b" origin="Maven Central; SHA-1 sidecar verified; SHA-256 calculated"/>
          </artifact>
          <artifact name="kotlinx-serialization-core-iosarm64-1.9.0.module">
@@ -3517,7 +3517,7 @@
          <artifact name="kotlinx-serialization-core-iossimulatorarm64-1.9.0-metadata.jar">
             <sha256 value="8d37ffc3f8573ad2b2934e41dc09f0a7d9bce4b9b89d091cc0addc261f337fb9" origin="Maven Central; SHA-1 sidecar verified; SHA-256 calculated"/>
          </artifact>
-         <artifact name="kotlinx-serialization-core-iossimulatorarm64-1.9.0.klib">
+         <artifact name="kotlinx-serialization-core-iosSimulatorArm64Main-1.9.0.klib">
             <sha256 value="730b6241431308a8451a1c92e44d7783c0c9884f5aa52958dc8c2dccdc53d958" origin="Maven Central; SHA-1 sidecar verified; SHA-256 calculated"/>
          </artifact>
          <artifact name="kotlinx-serialization-core-iossimulatorarm64-1.9.0.module">
@@ -3531,7 +3531,7 @@
          <artifact name="kotlinx-serialization-json-iosarm64-1.9.0-metadata.jar">
             <sha256 value="37ab0f5f586e35815a7c9e937f470bdb7b42629c6d5e74b20f49e1fe2d0921aa" origin="Maven Central; SHA-1 sidecar verified; SHA-256 calculated"/>
          </artifact>
-         <artifact name="kotlinx-serialization-json-iosarm64-1.9.0.klib">
+         <artifact name="kotlinx-serialization-json-iosArm64Main-1.9.0.klib">
             <sha256 value="db01ec8216ea242dc6433caa645d1eef7cedf683376fb6e71410065d6a9a6fd1" origin="Maven Central; SHA-1 sidecar verified; SHA-256 calculated"/>
          </artifact>
          <artifact name="kotlinx-serialization-json-iosarm64-1.9.0.module">
@@ -3545,7 +3545,7 @@
          <artifact name="kotlinx-serialization-json-iossimulatorarm64-1.9.0-metadata.jar">
             <sha256 value="37ab0f5f586e35815a7c9e937f470bdb7b42629c6d5e74b20f49e1fe2d0921aa" origin="Maven Central; SHA-1 sidecar verified; SHA-256 calculated"/>
          </artifact>
-         <artifact name="kotlinx-serialization-json-iossimulatorarm64-1.9.0.klib">
+         <artifact name="kotlinx-serialization-json-iosSimulatorArm64Main-1.9.0.klib">
             <sha256 value="839685030b740ede7a6d80e21595fe3b28b6dcd364c121a869113d888d70f1b9" origin="Maven Central; SHA-1 sidecar verified; SHA-256 calculated"/>
          </artifact>
          <artifact name="kotlinx-serialization-json-iossimulatorarm64-1.9.0.module">
