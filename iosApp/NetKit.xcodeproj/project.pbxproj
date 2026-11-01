@@ -6,6 +6,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		000000000000000000000C01 /* OpenSourceLicenses.txt in Resources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000C00 /* OpenSourceLicenses.txt */; };
 		000000000000000000000001 /* NetKitApp.swift in Sources */ = {
 			isa = PBXBuildFile;
 			fileRef = 000000000000000000000015 /* NetKitApp.swift */;
@@ -79,6 +80,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		000000000000000000000C00 /* OpenSourceLicenses.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = OpenSourceLicenses.txt; sourceTree = "<group>"; };
 		000000000000000000000015 /* NetKitApp.swift */ = {
 			isa = PBXFileReference;
 			lastKnownFileType = sourcecode.swift;
@@ -210,6 +212,7 @@
 				000000000000000000000805 /* SshKeyboard.swift */,
 				000000000000000000000806 /* SshView.swift */,
 				000000000000000000000015 /* NetKitApp.swift */,
+				000000000000000000000C00 /* OpenSourceLicenses.txt */,
 				000000000000000000000016 /* Localizable.xcstrings */,
 				000000000000000000000017 /* PrivacyInfo.xcprivacy */,
 				000000000000000000000100 /* LanView.swift */,
@@ -385,6 +388,7 @@
 			files = (
 				000000000000000000000002 /* Localizable.xcstrings in Resources */,
 				000000000000000000000003 /* PrivacyInfo.xcprivacy in Resources */,
+				000000000000000000000C01 /* OpenSourceLicenses.txt in Resources */,
 				000000000000000000000403 /* InfoPlist.strings in Resources */
 			);
 			runOnlyForDeploymentPostprocessing = 0;

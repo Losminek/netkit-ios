@@ -583,3 +583,24 @@ s bezpečností výměnou za širší kompatibilitu. Stav ověření aplikace je
 Licence Atomics, Collections a System zahrnují Runtime Library Exception k Apache-2.0.
 NIO NOTICE dále uvádí MIT cpp_magic.h a BSD-3-Clause části FreeBSD; tyto permisivní
 licence byly zkontrolovány v tagu 2.84.0 spolu s [NOTICE](https://github.com/apple/swift-nio/blob/2.84.0/NOTICE.txt).
+
+
+## 9. Offline licence v O aplikaci (P3, ověřeno 2026-11-01)
+
+P3 nepřidává závislosti ani nemění verze. Offline atribuce pokrývají stejných sedm Swift
+balíčků z §8 a Kotlin 2.2.20, coroutines 1.10.2, serialization 1.9.0 a atomicfu 0.26.1 z §6.
+Licenční texty a oznámení byly znovu načteny přes oficiální GitHub API z přesných tagů
+uvedených v těchto tabulkách dne 2026-11-01; nejde o texty pohyblivé větve main.
+
+Offline resource zahrnuje Apache-2.0 včetně Runtime Library Exception tam, kde ji balíček
+uvádí, a příslušná BSD/MIT oznámení. Doplňuje také atribuce částí již používaného Kotlin
+runtime: Boost Software License 1.0 a Unicode notice; nezavádí tím novou závislost.
+Původ těchto částí dokládá [Kotlin license README na v2.2.20](https://github.com/JetBrains/kotlin/blob/v2.2.20/license/README.md)
+(včetně runtime `runtime/src/main/cpp/Utils.cpp`) a [Kotlin/Native third-party licence na v2.2.20](https://github.com/JetBrains/kotlin/tree/v2.2.20/kotlin-native/licenses/third_party):
+Unicode, bounded MPMC queue, Apache Harmony a jeho NOTICE, libbacktrace.
+Licenční hlavička [runtime utf8.h](https://github.com/JetBrains/kotlin/blob/v2.2.20/kotlin-native/runtime/src/main/cpp/utf8.h)
+dokládá Boost licenci této další části. Uvedení těchto textů je atribuce stávajícího runtime,
+nikoli rozšíření povolených licencí pro nové knihovny.
+
+Offline zobrazení nevyžaduje síťový přístup. Stav implementace a dosud neprovedeného P3
+simulátorového ověření je v [ios.md §11](ios.md#11-dokončení--p3-rozpracováno-2026-11-01-čeká-ci).

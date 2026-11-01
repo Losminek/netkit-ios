@@ -11,6 +11,14 @@ enum SshCredential {
 
 enum SshTransportFailure: Error { case invalidCredential, unavailable, rejected, timeout, closed, protocolError }
 
+func sshAlgorithmNegotiationFailure(_ type: NIOSSHError.ErrorType) -> Bool {
+    type == .unknownPublicKey || type == .unknownSignature || type == .keyExchangeNegotiationFailure
+}
+
+func sshSupportedCredentialKey(_ publicKey: String) -> Bool {
+    publicKey.hasPrefix("ssh-ed25519 ")
+}
+
 private final class SshAuthentication: NIOSSHClientUserAuthenticationDelegate {
     private let username: String
     private var offer: NIOSSHUserAuthenticationOffer.Offer?
@@ -37,7 +45,7 @@ private final class SshAuthentication: NIOSSHClientUserAuthenticationDelegate {
 
 /// A single bounded connection; no background thread blocks the UI or logs raw provider errors.
 final class SshTransport {
-    enum State { case connected, closed, failed }
+    enum State { case connected, closed, failed, algorithmFailure }
     private let group: MultiThreadedEventLoopGroup
     private let lock = NSLock()
     private var closed = false
@@ -77,7 +85,11 @@ final class SshTransport {
                 let handler = NIOSSHHandler(role: .client(.init(userAuthDelegate: auth, serverAuthDelegate: validator)),
                                            allocator: channel.allocator, inboundChildChannelInitializer: nil)
                 return channel.pipeline.addHandler(handler).flatMap {
-                    channel.pipeline.addHandler(SshParentErrorHandler { [weak self] in self?.fail() })
+                    channel.pipeline.addHandler(SshParentErrorHandler { [weak self] error in
+                        if let error = error as? NIOSSHError, sshAlgorithmNegotiationFailure(error.type) {
+                            self?.terminate(.algorithmFailure)
+                        } else { self?.fail() }
+                    })
                 }
             }
         bootstrap.connect(host: host, port: port).whenComplete { [weak self] result in
@@ -194,10 +206,10 @@ final class SshTransport {
 /// Errors before child-channel creation must close the parent and report failure.
 private final class SshParentErrorHandler: ChannelInboundHandler {
     typealias InboundIn = Any
-    private let failed: () -> Void
-    init(failed: @escaping () -> Void) { self.failed = failed }
+    private let failed: (Error) -> Void
+    init(failed: @escaping (Error) -> Void) { self.failed = failed }
     func errorCaught(context: ChannelHandlerContext, error: Error) {
-        failed()
+        failed(error)
         context.close(promise: nil)
     }
 }

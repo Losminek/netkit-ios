@@ -22,6 +22,7 @@ private final class SshTestDiagnostics {
         case .connected: name = "state.connected"
         case .closed: name = "state.closed"
         case .failed: name = "state.failed"
+        case .algorithmFailure: name = "state.algorithmFailure"
         }
         append(name)
     }

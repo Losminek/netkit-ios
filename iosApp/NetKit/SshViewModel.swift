@@ -15,7 +15,7 @@ final class SshViewModel: ObservableObject {
         let fingerprint: String
         let reply: (Bool) -> Void
     }
-    enum ErrorKind { case storage, invalid, credentials, connection, hostChanged, hostRejected, timeout, inputOverflow }
+    enum ErrorKind { case storage, invalid, credentials, connection, algorithm, unsupportedCredential, hostChanged, hostRejected, timeout, inputOverflow }
     @Published var data: SshData?
     @Published var error: ErrorKind?
     @Published var hostPrompt: HostPrompt?
@@ -92,6 +92,10 @@ final class SshViewModel: ObservableObject {
         }
         let reference = profile.authentication == .key ? profile.keyRef : profile.secretRef
         guard let reference else { error = .credentials; return }
+        if profile.authentication == .key, let key = data?.keys.first(where: { $0.id == reference }),
+           !sshSupportedCredentialKey(key.publicKey) {
+            error = .unsupportedCredential; return
+        }
         let found = credentialStore.getSecret(id: reference)
         guard found.failure == nil, let bytes = found.bytes else { error = .credentials; return }
         let raw = Data((0..<bytes.size).map { UInt8(bitPattern: bytes.get(index: $0)) })
@@ -126,6 +130,7 @@ final class SshViewModel: ObservableObject {
                     switch state {
                     case .connected: self.connected = true
                     case .failed: self.hostPrompt = nil; self.connected = false; self.transport = nil; if self.error == nil { self.error = .connection }
+                    case .algorithmFailure: self.hostPrompt = nil; self.connected = false; self.transport = nil; self.error = .algorithm
                     case .closed: self.hostPrompt = nil; self.connected = false; self.transport = nil
                     }
                 })

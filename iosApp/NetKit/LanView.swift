@@ -211,6 +211,7 @@ struct LanView: View {
             Button("lan.browse") { request(.browse) }.disabled(session.running)
             if session.running { Button("network.cancel") { session.cancel() } }
             if !session.status.isEmpty { Text(verbatim: session.status) }
+            if session.status.isEmpty && session.results.isEmpty { Text("devices.empty") }
             ForEach(Array(session.results.enumerated()), id: \.offset) { _, value in Text(verbatim: value) }
         }
         .confirmationDialog("lan.consent.title", isPresented: $showingConsent, titleVisibility: .visible) {
@@ -226,7 +227,7 @@ struct LanView: View {
             }
             Button("network.cancel", role: .cancel) { pending = nil }
         } message: { Text("lan.warning") }
-        .navigationTitle("tab.lan")
+        .navigationTitle("tab.devices")
         .onChange(of: scenePhase) { _, phase in
             if phase == .background { session.cancel() }
         }

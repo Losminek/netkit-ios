@@ -161,6 +161,8 @@ struct SshView: View {
         case .invalid: "ssh.error.invalid"
         case .credentials: "ssh.error.credentials"
         case .connection: "ssh.error.connection"
+        case .algorithm: "ssh.error.algorithm"
+        case .unsupportedCredential: "ssh.error.unsupported_credential"
         case .hostChanged: "ssh.error.host.changed"
         case .hostRejected: "ssh.error.host.rejected"
         case .timeout: "ssh.error.timeout"

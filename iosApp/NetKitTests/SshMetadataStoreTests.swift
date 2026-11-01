@@ -6,6 +6,18 @@ import NetKitShared
 import XCTest
 
 final class SshMetadataStoreTests: XCTestCase {
+    func testUnsupportedAlgorithmsAreDistinguishedFromOtherFailures() {
+        XCTAssertTrue(sshAlgorithmNegotiationFailure(.unknownPublicKey))
+        XCTAssertTrue(sshAlgorithmNegotiationFailure(.unknownSignature))
+        XCTAssertTrue(sshAlgorithmNegotiationFailure(.keyExchangeNegotiationFailure))
+        XCTAssertFalse(sshAlgorithmNegotiationFailure(.tcpShutdown))
+        XCTAssertFalse(sshAlgorithmNegotiationFailure(.invalidExchangeHashSignature))
+        XCTAssertFalse(sshAlgorithmNegotiationFailure(.invalidHostKeyForKeyExchange))
+        XCTAssertTrue(sshSupportedCredentialKey("ssh-ed25519 example"))
+        XCTAssertFalse(sshSupportedCredentialKey("ssh-rsa example"))
+        XCTAssertFalse(sshSupportedCredentialKey("ecdsa-sha2-nistp256 example"))
+    }
+
     private func offered() throws -> TrustedHostKey {
         let key = NIOSSHPrivateKey(ed25519Key: Curve25519.Signing.PrivateKey()).publicKey
         let parts = String(openSSHPublicKey: key).split(separator: " ")

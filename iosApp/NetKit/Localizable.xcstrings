@@ -102,13 +102,13 @@
         "cs": {
           "stringUnit": {
             "state": "translated",
-            "value": "Probuzení"
+            "value": "WoL"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Wake-on-LAN"
+            "value": "WoL"
           }
         }
       }
@@ -1997,6 +1997,182 @@
           "stringUnit": {
             "state": "translated",
             "value": "Follow output"
+          }
+        }
+      }
+    },
+    "tab.overview": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Přehled"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overview"
+          }
+        }
+      }
+    },
+    "tab.devices": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zařízení"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Devices"
+          }
+        }
+      }
+    },
+    "wifi.not_checked": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aktuální Wi-Fi zatím nebyla zjištěna."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Current Wi-Fi has not been checked yet."
+          }
+        }
+      }
+    },
+    "devices.empty": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zatím žádné výsledky."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No results yet."
+          }
+        }
+      }
+    },
+    "wol.empty": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zatím žádná zařízení."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No devices yet."
+          }
+        }
+      }
+    },
+    "ssh.error.algorithm": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nepodařilo se vyjednat kompatibilní SSH algoritmy. iOS verze NetKitu podporuje hostitelské klíče Ed25519 a ECDSA; RSA nepodporuje."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not negotiate compatible SSH algorithms. NetKit for iOS supports Ed25519 and ECDSA host keys; RSA is unsupported."
+          }
+        }
+      }
+    },
+    "ssh.error.unsupported_credential": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nepodporovaný přihlašovací klíč. iOS verze NetKitu podporuje přihlašování klíčem pouze s Ed25519 vygenerovaným v aplikaci."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unsupported authentication key. NetKit for iOS supports key authentication only with Ed25519 keys generated in the app."
+          }
+        }
+      }
+    },
+    "about.privacy": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zásady ochrany soukromí"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Privacy policy"
+          }
+        }
+      }
+    },
+    "about.licenses": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open source licence"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open source licenses"
+          }
+        }
+      }
+    },
+    "about.licenses.unavailable": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Licence nejsou dostupné."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Licenses are unavailable."
+          }
+        }
+      }
+    },
+    "about.licenses.content": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Texty licencí"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "License texts"
           }
         }
       }

@@ -1,9 +1,11 @@
 # NetKit — iOS analýza
 
-**Stav 2026-10-31:** P0 ověřena v ARM simulátoru — SwiftUI nad `:shared`, link, build, Kotlin/Native,
+**Stav 2026-11-01:** P0 ověřena v ARM simulátoru — SwiftUI nad `:shared`, link, build, Kotlin/Native,
 XCTest bridge a CS/EN UI testy prošly v [CI 41219799892](https://github.com/Losminek/netkit-ios/actions/runs/41219799892).
 P1 prošla v [CI 41236666699](https://github.com/Losminek/netkit-ios/actions/runs/41236666699).
-Aktuální implementaci a omezení včetně P2 čekající na CI popisují §8–10.
+P2b prošla v [CI 41286184503](https://github.com/Losminek/netkit-ios/actions/runs/41286184503):
+45 XCTest a 6 UI testů. P3 je rozpracována a čeká na vlastní macOS CI.
+Aktuální implementaci a omezení popisují §8–11.
 Níže původní analýza z 2026-10-27 (D12) a v §7 ověření
 buildu bez Macu. Údaje označené „ověřit“ je nutné potvrdit v oficiální dokumentaci Applu
 v době, kdy se o iOS bude rozhodovat. Údaje v §6 byly ověřeny 2026-10-27; **[P]** = prokázáno
@@ -197,7 +199,7 @@ Později na fyzickém zařízení, nikoli v této fázi:
 - ICMP: datagramový ping v povolené síti, timeout a zrušení bez raw socketů.
 - Entitlementy: ověřit dostupnost před zařízením/distribucí, nepožadovat je kvůli CI simulátoru.
 
-## 9. Síťové nástroje — P1 (implementace, čeká macOS CI)
+## 9. Síťové nástroje — P1 (ověřeno v simulátoru)
 
 P1 používá Swift transporty nad existující doménou `:shared`. Adaptéry v `iosMain` zpřístupňují
 validaci portů, DNS zprávy, ICMP matcher, sanitizované mDNS názvy, rychlostní výpočty a skutečný
@@ -246,9 +248,9 @@ Přístupové URL s tokeny se neukládají ani nelogují. Testy nepřenášejí 
 TCP, DNS a WoL používají loopback; speed transporty používají lokální mocky. WSS fake ověřuje
 orchestraci, nenahrazuje handshake skutečného M-Lab serveru ani měření rychlosti na zařízení.
 
-Nové testy P1 čekají na první macOS CI. Linuxové testy nemohou potvrdit Swift kompilaci,
-Objective-C export, Apple linkování, síťové API simulátoru ani fyzickou Wi-Fi. Zelené P0
-potvrzuje pouze tehdejší kostru. Local Network dialog podle Apple simulátor nepodporuje.
+Testy P1 prošly v CI uvedeném v úvodu; následná regrese prošla i v P2b. Linuxové testy samy
+nemohou potvrdit Swift kompilaci, Objective-C export, Apple linkování ani síťové API simulátoru.
+Fyzická Wi-Fi zůstává neověřena. Local Network dialog podle Apple simulátor nepodporuje.
 
 Ověřené oficiální zdroje (2026-10-31):
 
@@ -262,8 +264,9 @@ Ověřené oficiální zdroje (2026-10-31):
 
 P1 je ověřena v simulátoru: [CI 41236666699](https://github.com/Losminek/netkit-ios/actions/runs/41236666699),
 Linux i macOS PASS, XCTest 30/30, UI 3/3 a Kotlin/Native testy PASS.
-P2 je implementační řez čekající na první macOS CI; lokální Linux ověřuje přenosné Kotlin
-bridge testy, nikoli Swift typecheck, Apple linker nebo skutečný Keychain simulátoru.
+P2b prošla v [CI 41286184503](https://github.com/Losminek/netkit-ios/actions/runs/41286184503):
+45 XCTest a 6 UI testů. Tento běh ověřil Swift sestavení, Apple linkování a Keychain simulátoru;
+lokální Linux navíc ověřuje přenosné Kotlin bridge testy, ale nenahrazuje macOS ani zařízení.
 
 - SwiftUI obrazovka SSH umožňuje uložit/upravit profil, přihlásit se heslem nebo v aplikaci
   vygenerovaným Ed25519 klíčem, otevřít PTY shell a relaci zavřít. Veřejný OpenSSH klíč lze
@@ -296,14 +299,15 @@ odstraňování se sdílenými referencemi není v P2. Tato omezení nezaváděj
 XCTest používají skutečný NIOSSH server pouze na 127.0.0.1, runtime generované host/user klíče
 a heslo, bez spouštění příkazů hostitele. Prověřují password/key auth, TOFU před autentizací,
 změnu host key, zrušení/pozdní potvrzení, Keychain a sdílený terminál. UI smoke přidává prázdný
-stav SSH; přesný výsledek P2 se doplní po CI. Dosavadní síťové testy se nevypínají.
+stav SSH. Výsledek P2b je uveden výše; dosavadní síťové testy zůstávají součástí regrese.
 
 Od opravy P2 3/3 běží unit testy v hostitelské `NetKit.app` přes `TEST_HOST`/`BUNDLE_LOADER`,
 aby používaly oprávnění procesu aplikace. Test target obsahuje jen testy a fixture;
 aplikační typy zpřístupňuje `@testable import NetKit` s testability v Debug. NetKitShared
 linkuje aplikace; v test targetu je odstraněn explicitní link i autolink tohoto frameworku.
 Import jeho typů zachovává framework search paths. Přímé Swift Package produkty lokálního
-SSH test serveru zůstávají. Skutečné linkování a Keychain musí ověřit nový macOS běh.
+SSH test serveru zůstávají. P2b doplnila aplikační produkt `NIOFoundationCompat` z již
+pinovaného swift-nio; test target jej přímo nelinkuje. Linkování a Keychain potvrdil zelený běh P2b.
 
 **Export compliance před distribucí:** SSH přidává do aplikace vlastní protokolovou vrstvu
 s kryptografií, i když matematické primitivy na iOS poskytuje CryptoKit. Hodnota
@@ -315,3 +319,31 @@ P2 ji nenastavuje a nečiní právní závěr o výjimce. Zdrojem postupu je
 Na zařízení zbývá ověřit zamčený Keychain, pozastavení/ukončení aplikace, změnu síťové cesty,
 VPN a Wi-Fi/mobilní přechod, IME/hardwarovou klávesnici a skutečné chování schránky/Universal Clipboard.
 Simulátor tato ověření nenahrazuje.
+
+
+## 11. Dokončení — P3 (rozpracováno 2026-11-01, čeká CI)
+
+P3 upravuje navigaci na právě čtyři záložky ve stejném pořadí jako Android:
+Přehled / Zařízení / SSH / WoL (EN Overview / Devices / SSH / WoL). Přehled zobrazuje
+aktuální Wi-Fi přímo a odkazy na podobrazovky Speedtest a O aplikaci; Zařízení obsahuje mDNS, ping,
+TCP porty a DNS. Systémová položka More se nepoužívá. Spektrum není součástí iOS.
+CS i EN UI testy mají ověřit čtyři položky, přístup k O aplikaci a prázdné stavy (AC-009).
+Tato změna dosud nemá výsledek macOS CI; zelené P2b ji nepotvrzuje.
+
+O aplikaci poskytuje verzi, lokalizovaný odkaz na zásady a offline licence komponent.
+`IosAboutDomain.privacyUrl(language:)` přijímá jazykový kód: `cs` (bez ohledu na velikost
+písmen) vrátí `https://www.daniel.losak.cz/netkit/privacy`, ostatní kódy
+`https://www.daniel.losak.cz/en/netkit/privacy`. Zadáním zmíněné `localizedWebUrl` v tomto
+checkoutu neexistuje; iOS wrapper volí lokalizovanou základní URL a používá existující
+sdílené `privacyPolicyUrl` z `update/ProjectLinks.kt`. `commonMain` se v P3 nemění.
+Kotlin testy kontrolují českou variantu i anglický fallback bez síťového přístupu.
+
+MVP podporuje host keys Ed25519 a ECDSA; přihlášení klíčem v UI používá pouze v aplikaci
+vygenerovaný Ed25519 klíč. RSA host ani uživatelské klíče SwiftNIO SSH nepodporuje.
+P3 při selhání vyjednávání zobrazuje obecnou CS/EN hlášku s informací o podporovaných
+Ed25519/ECDSA host keys; chyba vyjednávání sama neurčuje, zda příčinou bylo RSA.
+Nepřidává slabší fallback ani obejití kontroly host key. Offline licence a oznámení vycházejí z přesných pinovaných
+verzí; přehled verzí, zdrojů a licencí zůstává v [zavislosti.md](zavislosti.md).
+
+Fyzický iPhone, entitlementy, distribuce a export compliance zůstávají mimo toto ověření;
+checklist zařízení v §8 a §10 platí dál. Nezávislá revize před merge je nadále nutná.

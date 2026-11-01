@@ -1,4 +1,5 @@
 import SwiftUI
+import NetworkExtension
 import NetKitShared
 
 @main
@@ -11,28 +12,55 @@ struct NetKitApp: App {
 struct ContentView: View {
     var body: some View {
         TabView {
-            NavigationStack { AboutView() }
-                .tabItem { Label("tab.about", systemImage: "info.circle") }
+            NavigationStack { OverviewView() }
+                .tabItem { Label("tab.overview", systemImage: "wifi") }
             NavigationStack { LanView() }
-                .tabItem { Label("tab.lan", systemImage: "network") }
-            NavigationStack { WifiView() }
-                .tabItem { Label("tab.wifi", systemImage: "wifi") }
-            NavigationStack { SpeedView() }
-                .tabItem { Label("tab.speed", systemImage: "speedometer") }
-            NavigationStack { WolView() }
-                .tabItem { Label("tab.wol", systemImage: "power") }
+                .tabItem { Label("tab.devices", systemImage: "network") }
             NavigationStack { SshView() }
                 .tabItem { Label("tab.ssh", systemImage: "terminal") }
+            NavigationStack { WolView() }
+                .tabItem { Label("tab.wol", systemImage: "power") }
         }
     }
 }
 
+struct OverviewView: View {
+    @State private var network: NEHotspotNetwork?
+    @State private var checked = false
+    @State private var loading = false
+
+    var body: some View {
+        Form {
+            Section("tab.wifi") {
+                if let network {
+                    LabeledContent("wifi.ssid", value: network.ssid)
+                    LabeledContent("wifi.bssid", value: network.bssid)
+                } else if checked {
+                    Text("wifi.unavailable")
+                } else {
+                    Text("wifi.not_checked")
+                }
+                Button("wifi.refresh") {
+                    loading = true
+                    Task {
+                        network = await NEHotspotNetwork.fetchCurrent()
+                        checked = true
+                        loading = false
+                    }
+                }.disabled(loading)
+            }
+            NavigationLink("speed.title") { SpeedView() }
+            NavigationLink("tab.about") { AboutView() }
+        }
+        .navigationTitle("tab.overview")
+    }
+}
+
 struct AboutView: View {
-    private let address = WolDomainKt.parseIpv4(input: "192.0.2.1")?.description ?? "—"
     private let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
 
     var body: some View {
-        VStack(spacing: 16) {
+        Form {
             Text("app.title").font(.largeTitle).bold()
             HStack {
                 Text("app.version")
@@ -40,13 +68,29 @@ struct AboutView: View {
                 Text(verbatim: version).accessibilityIdentifier("appVersionValue")
             }
             .accessibilityElement(children: .contain)
-            HStack {
-                Text("shared.ipv4")
-                Spacer()
-                Text(verbatim: address).accessibilityIdentifier("sharedIPv4Value")
+            if let url = URL(string: IosAboutDomain().privacyUrl(language: Bundle.main.preferredLocalizations.first ?? "en")) {
+                Link("about.privacy", destination: url)
             }
-            .accessibilityElement(children: .contain)
+            NavigationLink("about.licenses") { OpenSourceLicensesView() }
         }
-        .padding()
+        .navigationTitle("tab.about")
+    }
+}
+
+struct OpenSourceLicensesView: View {
+    private let text: String? = Bundle.main.url(forResource: "OpenSourceLicenses", withExtension: "txt")
+        .flatMap { try? String(contentsOf: $0, encoding: .utf8) }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading) {
+                Text("about.licenses.content").font(.headline)
+                Text(verbatim: text ?? String(localized: "about.licenses.unavailable"))
+                    .textSelection(.enabled)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding()
+        }
+        .navigationTitle("about.licenses")
     }
 }

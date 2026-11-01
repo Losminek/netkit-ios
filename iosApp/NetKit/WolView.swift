@@ -68,6 +68,7 @@ struct WolView: View {
                 if model.invalid { Text("network.invalid").foregroundStyle(.red) }
             }
             Section("wol.devices") {
+                if model.state.devices.isEmpty && !model.state.loading && !model.state.loadFailed { Text("wol.empty") }
                 ForEach(model.state.devices, id: \.id) { device in
                     HStack {
                         Button(device.name) { selectedID = device.id; confirm = true }
