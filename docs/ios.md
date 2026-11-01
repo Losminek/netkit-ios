@@ -6,7 +6,7 @@ P1 prošla v [CI 41236666699](https://github.com/Losminek/netkit-ios/actions/run
 P2b prošla v [CI 41286184503](https://github.com/Losminek/netkit-ios/actions/runs/41286184503):
 45 XCTest a 6 UI testů. P3 prošla v [CI 41287557230](https://github.com/Losminek/netkit-ios/actions/runs/41287557230).
 Opravy revize R1 (interní záznam) prošly v [CI 41292675688](https://github.com/Losminek/netkit-ios/actions/runs/41292675688) (XCTest 68, UI 8); 2026-11-01 přeneseno do vývojového repa a od verze 1.0.1 součástí veřejného exportu.
-Parita SSH profilů v2 je implementována (§13), nové simulátorové ověření čeká na CI.
+Parita SSH profilů v2 je implementována (§13); Swift build a 83 XCTest prošly, opravy UI testů čekají na CI.
 Aktuální implementaci a omezení popisují §8–13.
 Níže původní analýza z 2026-10-27 (D12) a v §7 ověření
 buildu bez Macu. Údaje označené „ověřit“ je nutné potvrdit v oficiální dokumentaci Applu
@@ -421,7 +421,8 @@ Pořadí se mění šipkami nahoru/dolů, ukládá se do metadat a přežije res
 během operace či otevřeného náhledu jsou zakázané. VoiceOver popisky CS/EN obsahují jméno profilu.
 Profil KEY bez existujícího přiřazeného klíče před connect i reconnect zobrazí výzvu k editoru,
 aniž vznikne transport. Editor zachová KEY a vyžádá klíč; vytvoření nového Ed25519 klíče je
-přístupné i s jinými klíči v seznamu. Návrat zachová netajná rozepsaná pole, heslo se vymaže.
+přístupné i s jinými klíči v seznamu. Klávesnici editoru lze zavřít tlačítkem Hotovo/Done.
+Návrat zachová netajná rozepsaná pole, heslo se vymaže.
 Smazaný profil nelze z výzvy znovu vytvořit. Reconnect používá přesný profil potvrzený v dialogu.
 
 Keyboard-interactive iOS MVP nepodporuje. Importovaný INTERACTIVE profil má v seznamu i při
@@ -429,12 +430,14 @@ pokusu o spojení CS/EN vysvětlení a doporučení upravit ověření na heslo 
 výslovnou podporovanou volbu a tu předá při uložení; nepřevádí profil automaticky na heslo.
 RSA, cizí privátní klíče, automatické startup příkazy a keepalive zůstávají mimo podporu MVP.
 
-**Ověření:** předchozí simulátorový výsledek 68 XCTest / 8 UI je uveden v úvodu. Nová sada má
-ve zdrojích 83 XCTest (12 přibylo v bridge/ViewModel fázi a 3 v UI fázi) a 18 UI testů
-(10 nových CS/EN testů: export/pořadí/restart, náhled v1/v2, chybějící klíč/reconnect/vytvoření,
-INTERACTIVE → heslo/klíč a exportní chyby). Tyto počty nejsou výsledek spuštění: Swift build,
-Kotlin/Native a simulátorové testy této změny čekají na `ios.yml` v macOS. Lokální JVM kontrola
-15 přenositelných SSH bridge testů prošla; neověřuje Swift ani Apple API.
+**Ověření:** [CI 41318846320](https://github.com/Losminek/netkit-ios/actions/runs/41318846320)
+na `77e4473` potvrdilo Swift build, Kotlin/Native, **83 XCTest / 0 selhání** a Linux regresi.
+Ze **18 UI testů prošlo 12**, šest nových CS/EN metod selhalo (osm neúspěšných asercí):
+zavření systémového Files panelu, dostupnost vytvoření klíče při otevřené klávesnici a otevření
+pickeru klíče v editoru INTERACTIVE profilu. Testy náhledu v1/v2 a exportních chyb již prošly.
+Připravená oprava používá zavření skutečného Files panelu gestem, tlačítko Hotovo/Done a scroll
+uvnitř editoru před otevřením pickeru. Aserce přítomnosti exportu, dostupnosti ovládacích prvků,
+vybraného klíče a zachování draftu zůstávají. Zelený simulátorový běh této opravy zatím není doložen.
 
 UI testy mají opt-in fixture harness jen v Debug simulátoru, izolovaný podle UUID od běžných
 metadat a Keychain služby. Obsahuje pouze syntetická data a blokuje síťový transport.

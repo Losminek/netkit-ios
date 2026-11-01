@@ -141,8 +141,8 @@ final class NetKitUITests: XCTestCase {
 
 
 extension NetKitUITests {
-    func testEnglishSshOrderAndExport() { assertSshOrderAndExport(language: "en", locale: "en_US", cancel: "Cancel", up: "Move profile Alpha up", down: "Move profile Alpha down") }
-    func testCzechSshOrderAndExport() { assertSshOrderAndExport(language: "cs", locale: "cs_CZ", cancel: "Zrušit", up: "Posunout profil Alpha nahoru", down: "Posunout profil Alpha dolů") }
+    func testEnglishSshOrderAndExport() { assertSshOrderAndExport(language: "en", locale: "en_US", up: "Move profile Alpha up", down: "Move profile Alpha down") }
+    func testCzechSshOrderAndExport() { assertSshOrderAndExport(language: "cs", locale: "cs_CZ", up: "Posunout profil Alpha nahoru", down: "Posunout profil Alpha dolů") }
     func testEnglishSshImportPreview() { assertSshImportPreview(language: "en", locale: "en_US", key: "Key", password: "Password", empty: "Empty") }
     func testCzechSshImportPreview() { assertSshImportPreview(language: "cs", locale: "cs_CZ", key: "Klíč", password: "Heslo", empty: "Prázdné") }
     func testEnglishSshMissingKeyEditor() { assertSshMissingKeyEditor(language: "en", locale: "en_US", edit: "Edit", title: "Select a key") }
@@ -160,15 +160,16 @@ extension NetKitUITests {
         return app
     }
 
-    private func reveal(_ element: XCUIElement, in app: XCUIApplication, upwards: Bool = true, file: StaticString = #filePath, line: UInt = #line) {
+    private func reveal(_ element: XCUIElement, in app: XCUIApplication, upwards: Bool = true, scrollView: XCUIElement? = nil, file: StaticString = #filePath, line: UInt = #line) {
         for _ in 0..<8 {
             if element.exists && element.isHittable { return }
-            if upwards { app.swipeUp() } else { app.swipeDown() }
+            let surface = scrollView ?? app
+            if upwards { surface.swipeUp() } else { surface.swipeDown() }
         }
         XCTAssertTrue(element.exists && element.isHittable, "Element not visible: \(element)", file: file, line: line)
     }
 
-    private func assertSshOrderAndExport(language: String, locale: String, cancel: String, up: String, down: String) {
+    private func assertSshOrderAndExport(language: String, locale: String, up: String, down: String) {
         let id = UUID().uuidString
         var app = sshApp(language: language, locale: locale, scenario: "profiles", id: id)
         let upAlpha = app.buttons["ssh.move.up.alpha"]
@@ -190,10 +191,18 @@ extension NetKitUITests {
         app.buttons["ssh.export"].tap()
         let filename = app.textFields.matching(NSPredicate(format: "value CONTAINS[c] %@", "netkit-ssh-profiles")).firstMatch
         XCTAssertTrue(filename.waitForExistence(timeout: 10), "Validated export must present the system file exporter")
-        let cancelButton = app.buttons.matching(identifier: cancel).firstMatch
-        XCTAssertTrue(cancelButton.waitForExistence(timeout: 10))
-        cancelButton.tap()
-        XCTAssertTrue(app.buttons["ssh.export"].waitForExistence(timeout: 10))
+        XCTAssertEqual(filename.value as? String, "netkit-ssh-profiles")
+        // The pinned iOS 18.5 Files panel offers Move, without a Cancel button.
+        // Dismiss the actual sheet by its navigation chrome; never tap the obscured app behind it.
+        let filesBar = app.navigationBars["FullDocumentManagerViewControllerNavigationBar"]
+        XCTAssertTrue(filesBar.waitForExistence(timeout: 10))
+        XCTAssertTrue(filesBar.isHittable)
+        filesBar.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1)).press(forDuration: 0.05,
+            thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.9)))
+        let dismissed = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            !filesBar.exists && !filename.exists && app.buttons["ssh.export"].isHittable
+        }, object: app)
+        XCTAssertEqual(XCTWaiter.wait(for: [dismissed], timeout: 10), .completed)
         XCTAssertFalse(app.staticTexts["ssh.export.error"].exists)
     }
 
@@ -245,15 +254,22 @@ extension NetKitUITests {
         XCTAssertTrue(app.staticTexts["ssh.editor.key.required"].exists)
         let name = app.textFields["ssh.editor.name"]
         name.tap(); name.typeText(" draft")
+        let done = app.buttons["ssh.editor.keyboard.done"]
+        XCTAssertTrue(done.waitForExistence(timeout: 10))
+        done.tap()
+        let keyboardDismissed = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in app.keyboards.count == 0 }, object: app)
+        XCTAssertEqual(XCTWaiter.wait(for: [keyboardDismissed], timeout: 10), .completed)
+        let editorForm = app.collectionViews["ssh.editor.form"]
+        XCTAssertTrue(editorForm.exists)
         let create = app.buttons["ssh.editor.create.key"]
-        reveal(create, in: app)
+        reveal(create, in: app, scrollView: editorForm)
         create.tap()
         let keyName = app.textFields["ssh.creator.name"]
         XCTAssertTrue(keyName.waitForExistence(timeout: 10))
         keyName.tap(); keyName.typeText("Replacement")
         app.buttons["ssh.creator.generate"].tap()
         XCTAssertTrue(app.buttons["ssh.editor.save"].waitForExistence(timeout: 10))
-        reveal(app.buttons["ssh.editor.save"], in: app)
+        reveal(app.buttons["ssh.editor.save"], in: app, scrollView: editorForm)
         XCTAssertTrue(app.buttons["ssh.editor.save"].isEnabled)
         XCTAssertEqual(app.textFields["ssh.editor.name"].value as? String, "Alpha draft")
         XCTAssertFalse(app.staticTexts["ssh.editor.key.required"].exists)
@@ -292,8 +308,16 @@ extension NetKitUITests {
             app.buttons["ssh.editor.authentication"].tap()
             app.buttons[choice].tap()
             if choice == key {
-                app.buttons["ssh.editor.key"].tap()
-                app.buttons["Other key"].tap()
+                let editorForm = app.collectionViews["ssh.editor.form"]
+                XCTAssertTrue(editorForm.exists)
+                let picker = app.buttons["ssh.editor.key"]
+                reveal(picker, in: app, scrollView: editorForm)
+                picker.tap()
+                let option = app.buttons.matching(NSPredicate(format: "label == %@", "Other key")).firstMatch
+                XCTAssertTrue(option.waitForExistence(timeout: 10), "The visible key picker must open its menu")
+                XCTAssertTrue(option.isHittable)
+                option.tap()
+                XCTAssertTrue(picker.label.contains("Other key"), "The chosen key must be reflected in the picker")
             }
             XCTAssertTrue(app.buttons["ssh.editor.save"].isEnabled)
             app.buttons["ssh.editor.save"].tap()

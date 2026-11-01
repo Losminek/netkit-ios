@@ -2784,6 +2784,22 @@
           }
         }
       }
+    },
+    "ssh.keyboard.done": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hotovo"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Done"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

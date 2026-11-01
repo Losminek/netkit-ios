@@ -339,6 +339,7 @@ struct SshView: View {
 }
 
 private struct SshProfileEditor: View {
+    private enum Field: Hashable { case name, host, port, username, password }
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var model: SshViewModel
     let profile: SshProfile?
@@ -346,6 +347,7 @@ private struct SshProfileEditor: View {
     @State private var password = ""
     @State private var failed = false
     @State private var showKeyCreator = false
+    @FocusState private var focusedField: Field?
 
     init(model: SshViewModel, profile: SshProfile?) {
         self.model = model; self.profile = profile
@@ -356,10 +358,10 @@ private struct SshProfileEditor: View {
     var body: some View {
         NavigationStack {
             Form {
-                TextField("ssh.name", text: $draft.name).accessibilityIdentifier("ssh.editor.name")
-                TextField("ssh.host", text: $draft.host).textInputAutocapitalization(.never).autocorrectionDisabled().accessibilityIdentifier("ssh.editor.host")
-                TextField("lan.port", text: $draft.port).keyboardType(.numberPad)
-                TextField("ssh.user", text: $draft.username).textInputAutocapitalization(.never).autocorrectionDisabled()
+                TextField("ssh.name", text: $draft.name).focused($focusedField, equals: .name).accessibilityIdentifier("ssh.editor.name")
+                TextField("ssh.host", text: $draft.host).focused($focusedField, equals: .host).textInputAutocapitalization(.never).autocorrectionDisabled().accessibilityIdentifier("ssh.editor.host")
+                TextField("lan.port", text: $draft.port).focused($focusedField, equals: .port).keyboardType(.numberPad)
+                TextField("ssh.user", text: $draft.username).focused($focusedField, equals: .username).textInputAutocapitalization(.never).autocorrectionDisabled()
                 if profile?.authentication == .interactive { Text("ssh.interactive.unsupported").foregroundStyle(.orange) }
                 Picker("ssh.authentication", selection: $draft.authenticationChoice) {
                     if draft.authenticationChoice.isEmpty { Text("ssh.authentication.choose").tag("") }
@@ -376,7 +378,7 @@ private struct SshProfileEditor: View {
                     }
                     Button("ssh.key.generate") { password = ""; showKeyCreator = true }.accessibilityIdentifier("ssh.editor.create.key")
                 } else if draft.authentication == .password {
-                    SecureField("ssh.password", text: $password).textContentType(.password)
+                    SecureField("ssh.password", text: $password).focused($focusedField, equals: .password).textContentType(.password)
                 }
                 Button("ssh.save") {
                     guard let authentication = draft.authentication else { return }
@@ -391,8 +393,15 @@ private struct SshProfileEditor: View {
                     Button("ssh.ok") { failed = false }
                 }
             }
+            .accessibilityIdentifier("ssh.editor.form")
             .navigationTitle("ssh.profile")
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("network.cancel") { password = ""; dismiss() } } }
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("network.cancel") { password = ""; dismiss() } }
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("ssh.keyboard.done") { focusedField = nil }.accessibilityIdentifier("ssh.editor.keyboard.done")
+                }
+            }
             .onChange(of: draft.authenticationChoice) { _, _ in password = "" }
             .onDisappear { password = "" }
             .sheet(isPresented: $showKeyCreator) {
