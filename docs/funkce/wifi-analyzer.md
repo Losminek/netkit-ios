@@ -1,6 +1,6 @@
 # Funkce: Wi-Fi analyzér
 
-**Stav:** implementováno v M1c; fyzické ověření na Xiaomi 15 je stále otevřené.
+**Stav:** implementováno v M1c; fyzické ověření na telefonu je stále otevřené.
 Náhrada základního přehledu Wi-Fi z WiFiman a Wi-Fi části Network Analyzeru. Výsledky
 emulátoru ani napsaný kód se nepovažují za důkaz fyzického skenu.
 

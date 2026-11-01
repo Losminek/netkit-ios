@@ -362,12 +362,15 @@ Fyzický iPhone, entitlementy, distribuce a export compliance zůstávají mimo 
 checklist zařízení v §8 a §10 platí dál. Nezávislá revize před merge je nadále nutná.
 
 
-## 12. Opravy nezávislé revize — R1 (implementace, čeká CI)
+## 12. Opravy nezávislé revize — R1 (ověřeno CI 2026-11-01)
 
 R1 opravuje nálezy nad P0–P2 a přidává schválené cílené kontroly. Předchozí zelený P3 běh
 nepotvrzuje tyto nové změny. Výsledek Swift sestavení, Kotlin/Native a simulátorových testů R1
 se doplní po CI; na Linuxu nelze Apple transporty ani Keychain ověřit. Přenosné Kotlin bridge
 testy prošly v dočasné JVM konfiguraci (22 testů); nejde o Swift ani Kotlin/Native běh.
+
+Výsledek: simulátorové CI `netkit-ios` 41301816210 PASS (XCTest 68, UI 8) před přenosem do
+`netkit-dev` (2026-11-01).
 
 - SSH: monotónní hodiny zahrnující spánek a životní cyklus na úrovni aplikace, překryv terminálu
   při neaktivní scéně, úklid odpojených hesel až po úspěšném zápisu metadat a mazání profilů/klíčů.
@@ -403,7 +406,10 @@ zakázané importy v `commonMain` stejně jako hlavní CI. R1 nemění `commonMa
 Android ani Gradle konfiguraci. Nezávislá kontrola diffu a zelené R1 CI zůstávají branou před předáním.
 
 
-## 13. SSH profily v2 — implementace, čeká simulátorové CI
+## 13. SSH profily v2 (ověřeno simulátorovým CI 2026-11-01)
+
+Výsledek: kontrola „ARM iOS simulator“ ve veřejném PR vydání 1.0.1 PASS (2026-11-01).
+Fyzický iPhone dál NOT RUN.
 
 SwiftUI používá stávající sdílené jádro přes `IosSshDomain`; `commonMain` ani Android se nemění.
 Export vytváří pouze v2 (`netkit-ssh-profiles.json`), se stejným pořadím jako v seznamu a bez

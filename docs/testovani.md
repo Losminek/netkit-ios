@@ -597,7 +597,7 @@ APK instaluje správce, do výsledků žádná hesla, klíče ani zákaznická d
 
 ## 12. Fyzický checklist M3 — nový vzhled (0.5.1-dev)
 
-Xiaomi 15, tmavý i světlý režim systému. Výsledek PASS / FAIL + poznámka.
+Testovací telefon (Android 15, HyperOS), tmavý i světlý režim systému. Výsledek PASS / FAIL + poznámka.
 
 | # | Krok | Očekávání | Výsledek |
 |---|---|---|---|
@@ -620,7 +620,7 @@ Xiaomi 15, tmavý i světlý režim systému. Výsledek PASS / FAIL + poznámka.
 
 ## 13. Fyzický checklist M4 (0.6.0-dev)
 
-Xiaomi 15 (Android 15, HyperOS), Testovací SIM s podporou 5G NSA, druhá SIM podle testovacího scénáře, vlastní testovací Wi-Fi.
+Testovací telefon (Android 15, HyperOS), testovací SIM s podporou 5G NSA, druhá SIM podle testovacího scénáře, vlastní testovací Wi-Fi.
 Mobilní data spotřebují data tarifu, test rychlosti na nich spouštějte vědomě. Cíle jen vlastní
 nebo veřejné resolvery (1.1.1.1, 8.8.8.8). Výsledek PASS / FAIL + poznámka.
 

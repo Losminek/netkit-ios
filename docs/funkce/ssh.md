@@ -226,7 +226,7 @@ Při změně hostu, portu nebo uživatele existujícího profilu import odpojí 
 
 ### Doporučený postup
 
-1. V aplikaci vygenerovat Ed25519 klíč s komentářem např. `netkit@xiaomi15` a veřejnou
+1. V aplikaci vygenerovat Ed25519 klíč s komentářem např. `netkit@telefon` a veřejnou
    část uložit/přenést na PC jako soubor `.pub`.
 2. Rozdat veřejný klíč na hosty:
    `python3 -I tools/netkit_ssh_export.py install-pubkey --key ~/netkit.pub --only pve,pbs`
