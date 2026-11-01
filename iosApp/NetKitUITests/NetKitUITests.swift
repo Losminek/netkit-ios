@@ -114,13 +114,15 @@ final class NetKitUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts[empty].exists)
     }
 
-    private func launch(language: String, locale: String, scenario: String = "empty", id: String = UUID().uuidString, reset: Bool = true, captureSshExport: Bool = false) -> XCUIApplication {
+    private func launch(language: String, locale: String, scenario: String? = nil, id: String = UUID().uuidString, reset: Bool = true, captureSshExport: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments += ["-AppleLanguages", "(\(language))", "-AppleLocale", locale]
-        if captureSshExport { app.launchArguments.append("-netkit-ui-capture-ssh-export") }
-        app.launchEnvironment["NETKIT_UI_SSH_ID"] = id
-        app.launchEnvironment["NETKIT_UI_SSH_SCENARIO"] = scenario
-        app.launchEnvironment["NETKIT_UI_SSH_RESET"] = reset ? "1" : "0"
+        if let scenario {
+            if captureSshExport { app.launchArguments.append("-netkit-ui-capture-ssh-export") }
+            app.launchEnvironment["NETKIT_UI_SSH_ID"] = id
+            app.launchEnvironment["NETKIT_UI_SSH_SCENARIO"] = scenario
+            app.launchEnvironment["NETKIT_UI_SSH_RESET"] = reset ? "1" : "0"
+        }
         app.launch()
         return app
     }
@@ -153,6 +155,59 @@ extension NetKitUITests {
     func testCzechSshInteractiveProfile() { assertSshInteractiveProfile(language: "cs", locale: "cs_CZ", password: "Heslo", key: "Klíč", message: "iOS verze nepodporuje keyboard-interactive, upravte profil na heslo nebo klíč.") }
     func testEnglishSshExportValidation() { assertSshExportValidation(language: "en", locale: "en_US", duplicate: "Profiles have duplicate names.", large: "The export exceeds 256 KiB.") }
     func testCzechSshExportValidation() { assertSshExportValidation(language: "cs", locale: "cs_CZ", duplicate: "Profily mají duplicitní názvy.", large: "Export překračuje limit 256 KiB.") }
+
+    func testEnglishSshEditorAndKeyErrors() {
+        assertSshEditorAndKeyErrors(language: "en", locale: "en_US", password: "Password", key: "Key", invalid: "Check the entered values or file.")
+    }
+    func testCzechSshEditorAndKeyErrors() {
+        assertSshEditorAndKeyErrors(language: "cs", locale: "cs_CZ", password: "Heslo", key: "Klíč", invalid: "Zkontrolujte zadané údaje nebo soubor.")
+    }
+
+    private func assertSshEditorAndKeyErrors(language: String, locale: String, password: String, key: String, invalid: String) {
+        let app = sshApp(language: language, locale: locale, scenario: "interactive")
+        reveal(app.buttons["ssh.connect.alpha"], in: app)
+        app.buttons["ssh.connect.alpha"].tap() // Leave the unsupported-auth error pending when opening the editor.
+        XCTAssertTrue(app.staticTexts["ssh.error"].waitForExistence(timeout: 10))
+        reveal(app.buttons["ssh.edit.alpha"], in: app)
+        app.buttons["ssh.edit.alpha"].tap()
+        XCTAssertTrue(app.buttons["ssh.editor.save"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.staticTexts["ssh.editor.error"].exists)
+        let form = app.collectionViews["ssh.editor.form"]
+        let authentication = app.buttons["ssh.editor.authentication"]
+        reveal(authentication, in: app, scrollView: form)
+        authentication.tap()
+        app.buttons[password].tap()
+        let port = app.textFields["ssh.editor.port"]
+        reveal(port, in: app, upwards: false, scrollView: form)
+        port.tap(); port.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 2) + "0")
+        app.buttons["ssh.editor.keyboard.done"].tap()
+        reveal(app.buttons["ssh.editor.save"], in: app, scrollView: form)
+        app.buttons["ssh.editor.save"].tap()
+        let editorError = app.staticTexts["ssh.editor.error"]
+        reveal(editorError, in: app, scrollView: form)
+        XCTAssertEqual(editorError.label, invalid)
+        reveal(authentication, in: app, upwards: false, scrollView: form)
+        authentication.tap()
+        app.buttons[key].tap()
+        let create = app.buttons["ssh.editor.create.key"]
+        reveal(create, in: app, scrollView: form)
+        create.tap() // The prior invalid-input error must not appear as a stale key-creation failure.
+        let name = app.textFields["ssh.creator.name"]
+        XCTAssertTrue(name.waitForExistence(timeout: 10))
+        XCTAssertFalse(app.staticTexts["ssh.creator.error"].exists)
+        name.tap(); name.typeText(String(repeating: "x", count: 101))
+        app.buttons["ssh.creator.generate"].tap()
+        let keyError = app.staticTexts["ssh.creator.error"]
+        XCTAssertTrue(keyError.waitForExistence(timeout: 10))
+        XCTAssertEqual(keyError.label, invalid)
+        app.buttons["ssh.creator.cancel"].tap()
+        XCTAssertTrue(create.waitForExistence(timeout: 10))
+        reveal(create, in: app, scrollView: form)
+        create.tap()
+        XCTAssertTrue(name.waitForExistence(timeout: 10))
+        XCTAssertFalse(keyError.exists, "Opening key creation must clear the previous failure")
+        app.buttons["ssh.creator.cancel"].tap()
+    }
 
     private func sshApp(language: String, locale: String, scenario: String, id: String = UUID().uuidString, reset: Bool = true, captureSshExport: Bool = false) -> XCUIApplication {
         let app = launch(language: language, locale: locale, scenario: scenario, id: id, reset: reset, captureSshExport: captureSshExport)

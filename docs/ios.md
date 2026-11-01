@@ -6,7 +6,8 @@ P1 prošla v [CI 41236666699](https://github.com/Losminek/netkit-ios/actions/run
 P2b prošla v [CI 41286184503](https://github.com/Losminek/netkit-ios/actions/runs/41286184503):
 45 XCTest a 6 UI testů. P3 prošla v [CI 41287557230](https://github.com/Losminek/netkit-ios/actions/runs/41287557230).
 Opravy revize R1 (interní záznam) prošly v [CI 41292675688](https://github.com/Losminek/netkit-ios/actions/runs/41292675688) (XCTest 68, UI 8); 2026-11-01 přeneseno do vývojového repa a od verze 1.0.1 součástí veřejného exportu.
-Parita SSH profilů v2 je implementována (§13); Swift build a 83 XCTest prošly, opravy UI testů čekají na CI.
+Parita SSH profilů v2 (§13) prošla v [CI 41323807968](https://github.com/Losminek/netkit-ios/actions/runs/41323807968)
+na `f3b5fad`: XCTest 83/0, UI 18/18 CS/EN a Linux PASS.
 Aktuální implementaci a omezení popisují §8–13.
 Níže původní analýza z 2026-10-27 (D12) a v §7 ověření
 buildu bez Macu. Údaje označené „ověřit“ je nutné potvrdit v oficiální dokumentaci Applu
@@ -430,21 +431,20 @@ pokusu o spojení CS/EN vysvětlení a doporučení upravit ověření na heslo 
 výslovnou podporovanou volbu a tu předá při uložení; nepřevádí profil automaticky na heslo.
 RSA, cizí privátní klíče, automatické startup příkazy a keepalive zůstávají mimo podporu MVP.
 
-**Ověření:** [CI 41318846320](https://github.com/Losminek/netkit-ios/actions/runs/41318846320)
-na `77e4473` potvrdilo Swift build, Kotlin/Native, **83 XCTest / 0 selhání** a Linux regresi.
-Ze **18 UI testů prošlo 12**, šest nových CS/EN metod selhalo (osm neúspěšných asercí):
-zavření systémového Files panelu, dostupnost vytvoření klíče při otevřené klávesnici a otevření
-pickeru klíče v editoru INTERACTIVE profilu. Testy náhledu v1/v2 a exportních chyb již prošly.
-Připravená oprava používá zavření skutečného Files panelu gestem, tlačítko Hotovo/Done a scroll
-uvnitř editoru před otevřením pickeru. Aserce přítomnosti exportu, dostupnosti ovládacích prvků,
-vybraného klíče a zachování draftu zůstávají. Zelený simulátorový běh této opravy zatím není doložen.
+**Ověření:** zelené [CI 41323807968](https://github.com/Losminek/netkit-ios/actions/runs/41323807968)
+na `f3b5fad` potvrdilo Swift build, Kotlin/Native, **83 XCTest / 0 selhání**, **18/18 UI testů
+CS/EN** a Linux regresi. Exportní UI test přes výslovný DEBUG launch argument zachytí skutečná
+připravená data; ověří JSON v2, pořadí po restartu a nepřítomnost lokálních ID, referencí,
+klíčů a důvěry. Systémový panel Files při tomto testu neotevírá. Běžný fileExporter se nemění.
 
 UI testy mají opt-in fixture harness jen v Debug simulátoru, izolovaný podle UUID od běžných
 metadat a Keychain služby. Obsahuje pouze syntetická data a blokuje síťový transport.
 Test náhledu obchází pouze systémový výběr fixture souboru; dále používá běžné dekódování,
-plánování a potvrzení importu. Exportní test otevírá skutečný systémový fileExporter.
+plánování a potvrzení importu. Exportní DEBUG háček nahrazuje pouze systémový dialog,
+nikoli přípravu nebo validaci exportu. Původní launch a SSH empty testy fixture harness nepoužívají.
 
-**Na iPhonu zbývá:** Files a přenos v1/v2/legacy mezi platformami, VoiceOver/velikost písma,
+**Na iPhonu zbývá:** fyzický export přes Files (otevření, zápis i zrušení dialogu), import
+a přenos v1/v2/legacy mezi platformami, VoiceOver/velikost písma,
 uložené pořadí po ukončení procesu, výzva → editor → vytvoření klíče, ovládání s klávesnicí,
 zamknutý Keychain a reconnect při změně sítě nebo VPN. Platí také checklist §8/§10;
 simulátor nenahrazuje fyzické přijetí. Distribuce, Apple účet a podpis pro zařízení nejsou součástí.

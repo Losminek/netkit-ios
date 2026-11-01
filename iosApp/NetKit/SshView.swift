@@ -59,6 +59,23 @@ func sshExportFailureMessage(_ failure: SshViewModel.ExportFailure) -> String {
     }
 }
 
+func errorKey(_ error: SshViewModel.ErrorKind) -> String {
+    switch error {
+    case .storage: "ssh.error.storage"
+    case .invalid: "ssh.error.invalid"
+    case .credentials: "ssh.error.credentials"
+    case .keyInUse: "ssh.error.key.in.use"
+    case .connection: "ssh.error.connection"
+    case .algorithm: "ssh.error.algorithm"
+    case .unsupportedCredential: "ssh.error.unsupported_credential"
+    case .interactiveUnsupported: "ssh.interactive.unsupported"
+    case .hostChanged: "ssh.error.host.changed"
+    case .hostRejected: "ssh.error.host.rejected"
+    case .timeout: "ssh.error.timeout"
+    case .inputOverflow: "ssh.error.input"
+    }
+}
+
 @MainActor
 func sshHostPromptMessage(_ prompt: SshViewModel.HostPrompt) -> String {
     var text = "\(prompt.endpoint)\n\(prompt.algorithm)\n\(prompt.fingerprint)"
@@ -98,7 +115,7 @@ struct SshView: View {
             Text("ssh.notice")
             if let error = model.error {
                 Section {
-                    Text(errorKey(error)).foregroundStyle(.red).accessibilityIdentifier("ssh.error")
+                    Text(LocalizedStringKey(errorKey(error))).foregroundStyle(.red).accessibilityIdentifier("ssh.error")
                     Button("ssh.ok") { model.error = nil }
                 }
             }
@@ -339,23 +356,6 @@ struct SshView: View {
     private func isUserCancellation(_ error: Error) -> Bool {
         (error as NSError).domain == NSCocoaErrorDomain && (error as NSError).code == NSUserCancelledError
     }
-
-    private func errorKey(_ error: SshViewModel.ErrorKind) -> LocalizedStringKey {
-        switch error {
-        case .storage: "ssh.error.storage"
-        case .invalid: "ssh.error.invalid"
-        case .credentials: "ssh.error.credentials"
-        case .keyInUse: "ssh.error.key.in.use"
-        case .connection: "ssh.error.connection"
-        case .algorithm: "ssh.error.algorithm"
-        case .unsupportedCredential: "ssh.error.unsupported_credential"
-        case .interactiveUnsupported: "ssh.interactive.unsupported"
-        case .hostChanged: "ssh.error.host.changed"
-        case .hostRejected: "ssh.error.host.rejected"
-        case .timeout: "ssh.error.timeout"
-        case .inputOverflow: "ssh.error.input"
-        }
-    }
 }
 
 private struct SshProfileEditor: View {
@@ -380,7 +380,7 @@ private struct SshProfileEditor: View {
             Form {
                 TextField("ssh.name", text: $draft.name).focused($focusedField, equals: .name).accessibilityIdentifier("ssh.editor.name")
                 TextField("ssh.host", text: $draft.host).focused($focusedField, equals: .host).textInputAutocapitalization(.never).autocorrectionDisabled().accessibilityIdentifier("ssh.editor.host")
-                TextField("lan.port", text: $draft.port).focused($focusedField, equals: .port).keyboardType(.numberPad)
+                TextField("lan.port", text: $draft.port).focused($focusedField, equals: .port).keyboardType(.numberPad).accessibilityIdentifier("ssh.editor.port")
                 TextField("ssh.user", text: $draft.username).focused($focusedField, equals: .username).textInputAutocapitalization(.never).autocorrectionDisabled()
                 if profile?.authentication == .interactive { Text("ssh.interactive.unsupported").foregroundStyle(.orange) }
                 Picker("ssh.authentication", selection: $draft.authenticationChoice) {
@@ -409,11 +409,13 @@ private struct SshProfileEditor: View {
                 }.disabled(model.busy || draft.authentication == nil || draft.needsKeySelection(keys: model.data?.keys ?? []))
                     .accessibilityIdentifier("ssh.editor.save")
                 if failed {
-                    Text(model.profileUnavailable ? LocalizedStringKey("ssh.profile.unavailable") : LocalizedStringKey("ssh.error.invalid")).foregroundStyle(.red)
-                    Button("ssh.ok") { failed = false }
+                    Text(LocalizedStringKey(model.profileUnavailable ? "ssh.profile.unavailable" : errorKey(model.error ?? .invalid)))
+                        .foregroundStyle(.red).accessibilityIdentifier("ssh.editor.error")
+                    Button("ssh.ok") { failed = false; model.error = nil }
                 }
             }
             .accessibilityIdentifier("ssh.editor.form")
+            .onAppear { model.error = nil; failed = false }
             .navigationTitle("ssh.profile")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("network.cancel") { password = ""; dismiss() } }
@@ -446,12 +448,15 @@ private struct SshKeyCreator: View {
                     if let key = model.data?.keys.first(where: { !previous.contains($0.id) }) { created(key.id); dismiss() }
                 }.disabled(model.busy || name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     .accessibilityIdentifier("ssh.creator.generate")
-                if model.error != nil {
-                    Text("ssh.error.storage").foregroundStyle(.red)
+                if let error = model.error {
+                    Text(LocalizedStringKey(errorKey(error))).foregroundStyle(.red).accessibilityIdentifier("ssh.creator.error")
                     Button("ssh.ok") { model.error = nil }
                 }
             }.navigationTitle("ssh.key.generate")
-                .toolbar { ToolbarItem(placement: .cancellationAction) { Button("network.cancel") { dismiss() } } }
+                .onAppear { model.error = nil }
+                .toolbar { ToolbarItem(placement: .cancellationAction) {
+                    Button("network.cancel") { dismiss() }.accessibilityIdentifier("ssh.creator.cancel")
+                } }
         }
     }
 }

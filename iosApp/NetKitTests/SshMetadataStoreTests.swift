@@ -580,3 +580,24 @@ final class SshProfileEditorTests: XCTestCase {
         XCTAssertTrue(description.contains("Beta"))
     }
 }
+
+extension SshProfileEditorTests {
+    @MainActor
+    func testProfilePersistenceFailureKeepsSpecificErrorMessage() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let chain = KeychainSecrets(service: "cz.netkit.ios.tests." + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root); try? chain.deleteServiceItems() }
+        let model = SshViewModel(keychain: chain, directory: root)
+        XCTAssertNotNil(model.data)
+        try FileManager.default.removeItem(at: root)
+        try Data(UUID().uuidString.utf8).write(to: root)
+        XCTAssertFalse(model.saveProfile(id: nil, name: "Target", host: "192.0.2.1", port: "22",
+            username: "tester", keyRef: nil, password: ""))
+        let failure = try XCTUnwrap(model.error)
+        XCTAssertEqual(failure, .storage)
+        XCTAssertEqual(errorKey(failure), "ssh.error.storage")
+        XCTAssertNotEqual(errorKey(failure), errorKey(.invalid))
+        XCTAssertNotEqual(errorKey(.credentials), errorKey(.invalid))
+        XCTAssertNotEqual(errorKey(.interactiveUnsupported), errorKey(failure))
+    }
+}

@@ -125,6 +125,29 @@ jobs:
             -onlyUsePackageVersionsFromResolvedFile -disableAutomaticPackageResolution \
             CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=YES \
             build 2>&1 | tee artifacts/ios/build.log
+      - name: Build unsigned Release simulator app and reject UI export hook
+        run: |
+          ./gradlew --no-daemon --dependency-verification strict -Pnetkit.ios=true \
+            :shared:linkReleaseFrameworkIosSimulatorArm64
+          xcodebuild -project iosApp/NetKit.xcodeproj -scheme NetKit \
+            -configuration Release -sdk iphonesimulator \
+            -destination "platform=iOS Simulator,id=$IOS_SIMULATOR_ID" \
+            -derivedDataPath build/ios-release-derived \
+            -resultBundlePath artifacts/ios/release-build.xcresult \
+            -onlyUsePackageVersionsFromResolvedFile -disableAutomaticPackageResolution \
+            CODE_SIGNING_ALLOWED=NO build 2>&1 | tee artifacts/ios/release-build.log
+          python3 - <<'PY'
+          from pathlib import Path
+
+          binary = Path("build/ios-release-derived/Build/Products/Release-iphonesimulator/NetKit.app/NetKit")
+          contents = binary.read_bytes()
+          if not contents:
+              raise SystemExit("Release app executable is empty")
+          if b"netkit-ui-capture-ssh-export" in contents:
+              raise SystemExit("Release app contains the DEBUG UI export hook")
+          print("PASS: Release app excludes the DEBUG UI export hook")
+          PY
+          git diff --exit-code -- iosApp/NetKit.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
       - name: Swift local transport integration and localized launch tests
         run: |
           xcodebuild -project iosApp/NetKit.xcodeproj -scheme NetKit \
