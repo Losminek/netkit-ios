@@ -245,13 +245,16 @@ struct LanView: View {
     @State private var pending: Action?
     @State private var showingConsent = false
     @State private var scanConsent: ScanConsent?
+    @FocusState private var focusedField: Field?
 
+    private enum Field: Hashable { case host, port, dnsServer }
     private enum Action { case scan, dns, ping, browse }
     private var currentScanConsent: ScanConsent {
         ScanConsent(host: host.trimmingCharacters(in: .whitespacesAndNewlines),
                     ports: port.trimmingCharacters(in: .whitespacesAndNewlines), cidr: session.activeWifiCIDR)
     }
     private func request(_ action: Action) {
+        focusedField = nil
         pending = action
         scanConsent = action == .scan ? currentScanConsent : nil
         showingConsent = true
@@ -261,9 +264,12 @@ struct LanView: View {
         Form {
             Text("lan.warning")
             TextField("lan.host", text: $host).textInputAutocapitalization(.never).autocorrectionDisabled()
+                .focused($focusedField, equals: .host)
             TextField("lan.port", text: $port).keyboardType(.numbersAndPunctuation)
+                .focused($focusedField, equals: .port)
             Button("lan.tcp") { request(.scan) }.disabled(session.running)
             TextField("lan.dns.server", text: $dnsServer).textInputAutocapitalization(.never).autocorrectionDisabled()
+                .focused($focusedField, equals: .dnsServer)
             Button("lan.dns") { request(.dns) }.disabled(session.running)
             Button("lan.ping") { request(.ping) }.disabled(session.running)
             Button("lan.browse") { request(.browse) }.disabled(session.running)

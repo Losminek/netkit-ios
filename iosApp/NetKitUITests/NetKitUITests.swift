@@ -66,6 +66,13 @@ final class NetKitUITests: XCTestCase {
         XCTAssertTrue(reasonText.waitForExistence(timeout: 10))
         XCTAssertTrue(reasonText.isHittable)
         app.buttons[cancel].tap()
+        let navigationReady = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            app.keyboards.count == 0 && app.tabBars.firstMatch.isHittable && tabs["WoL"].isHittable
+        }, object: app)
+        XCTAssertEqual(XCTWaiter.wait(for: [navigationReady], timeout: 10), .completed)
+        XCTAssertEqual(app.keyboards.count, 0)
+        XCTAssertTrue(app.tabBars.firstMatch.isHittable)
+        XCTAssertTrue(tabs["WoL"].isHittable)
         tabs["WoL"].tap()
         let warningText = app.staticTexts[warning]
         XCTAssertTrue(warningText.waitForExistence(timeout: 10))
