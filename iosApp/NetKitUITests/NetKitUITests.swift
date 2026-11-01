@@ -74,7 +74,7 @@ final class NetKitUITests: XCTestCase {
         XCTAssertTrue(app.tabBars.firstMatch.isHittable)
         XCTAssertTrue(tabs["WoL"].isHittable)
         tabs["WoL"].tap()
-        let warningText = app.staticTexts[warning]
+        let warningText = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", warning)).firstMatch
         XCTAssertTrue(warningText.waitForExistence(timeout: 10))
         XCTAssertTrue(warningText.isHittable)
         XCTAssertFalse(app.switches["Broadcast"].exists)
