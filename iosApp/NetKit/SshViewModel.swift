@@ -240,7 +240,7 @@ final class SshViewModel: ObservableObject {
         guard canMoveProfile(id: id, delta: delta), let store else { return }
         busy = true; defer { busy = false }
         do { try store.moveProfile(id: id, delta: Int32(delta)); data = store.snapshot(); error = nil }
-        catch { error = .storage }
+        catch { self.error = .storage }
     }
 
     @discardableResult
@@ -416,7 +416,7 @@ final class SshViewModel: ObservableObject {
         busy = true; defer { busy = false }
         importPlan = nil; importKeyRef = nil
         do { importPlan = try store.planImport(imported, keyRef: keyRef); importKeyRef = keyRef; error = nil }
-        catch { error = .invalid }
+        catch { self.error = .invalid }
     }
     func cancelImport() { importPlan = nil; pendingImport = nil; importKeyRef = nil }
     func importAddedCount(_ plan: SshImportPlan) -> Int32 { domain.importAddedCount(plan: plan) }
