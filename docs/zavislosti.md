@@ -539,7 +539,7 @@ Network.framework obsluhuje TCP, DNS UDP, Bonjour a WoL. POSIX datagramový ICMP
 implementace nad veřejným API, bez přibalení či kopírování cizího síťového kódu. Speedtest používá
 URLSession HTTPS/WSS a existující sdílené parsery; neposkytuje ani nevyžaduje placenou službu.
 Runner, Xcode, SHA akcí a Linux build se kvůli P1 nemění. Skutečný stav ověření je v
-[ios.md §9](ios.md#9-síťové-nástroje--p1-implementace-čeká-macos-ci).
+[ios.md §9](ios.md#9-síťové-nástroje--p1-ověřeno-v-simulátoru).
 
 
 ## 8. iOS SSH (P2, ověřeno 2026-10-31)
@@ -603,4 +603,4 @@ dokládá Boost licenci této další části. Uvedení těchto textů je atribu
 nikoli rozšíření povolených licencí pro nové knihovny.
 
 Offline zobrazení nevyžaduje síťový přístup. Stav implementace a dosud neprovedeného P3
-simulátorového ověření je v [ios.md §11](ios.md#11-dokončení--p3-rozpracováno-2026-11-01-čeká-ci).
+simulátorového ověření je v [ios.md §11](ios.md#11-dokončení--p3-ověřeno-2026-11-01).

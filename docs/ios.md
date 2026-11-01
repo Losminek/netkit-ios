@@ -5,7 +5,7 @@ XCTest bridge a CS/EN UI testy prošly v [CI 41219799892](https://github.com/Los
 P1 prošla v [CI 41236666699](https://github.com/Losminek/netkit-ios/actions/runs/41236666699).
 P2b prošla v [CI 41286184503](https://github.com/Losminek/netkit-ios/actions/runs/41286184503):
 45 XCTest a 6 UI testů. P3 prošla v [CI 41287557230](https://github.com/Losminek/netkit-ios/actions/runs/41287557230).
-Opravy revize R1 jsou rozpracované a čekají na vlastní macOS CI.
+Opravy revize R1 (interní záznam) prošly v [CI 41292675688](https://github.com/Losminek/netkit-ios/actions/runs/41292675688) (XCTest 68, UI 8); 2026-11-01 přeneseno do vývojového repa a od verze 1.0.1 součástí veřejného exportu.
 Aktuální implementaci a omezení popisují §8–12.
 Níže původní analýza z 2026-10-27 (D12) a v §7 ověření
 buildu bez Macu. Údaje označené „ověřit“ je nutné potvrdit v oficiální dokumentaci Applu
@@ -160,7 +160,9 @@ a distribuce nejsou součástí této fáze. Android aplikace ani její platform
 ### Sestavení a ověření
 
 Workflow [ios.yml](../.github/workflows/ios.yml) má samostatný Linux job pro Android/JVM regresi
-a macOS job pro ARM simulátor. Verze toolchainu a jejich zdroje jsou v
+a macOS job pro ARM simulátor. V privátním `netkit-dev` se spouští jen ručně (`workflow_dispatch`),
+protože macOS minuty se počítají 10×; spustit po změně `iosApp/`, `iosMain` nebo sdíleného API,
+které `iosMain` volá. Verze toolchainu a jejich zdroje jsou v
 [závislostech](zavislosti.md#6-ios-kostra-a-ci-p0-2026-10-31).
 macOS job kontroluje existenci binárky, hlavičky a module map frameworku; pouhý úspěšný Gradle
 příkaz nestačí. Následují `xcodebuild build` a `xcodebuild test`; od opravy P2 3/3 používají
@@ -168,6 +170,8 @@ lokální ad-hoc podpis simulátoru (`CODE_SIGN_IDENTITY=-`) kvůli Keychain tes
 Tato [pseudoidentita nevyžaduje certifikát](https://developer.apple.com/library/archive/documentation/Security/Conceptual/CodeSigningGuide/RequirementLang/RequirementLang.html),
 Apple účet, vývojový tým ani provisioning profil. Nejde o podpis pro distribuci či zařízení.
 Logy a `.xcresult` se ukládají jako artefakt `ios-simulator-results` i při neúspěchu.
+
+**Vývoj:** iOS se vyvíjí ve stejném vývojovém repu jako Android a od verze 1.0.1 je součástí veřejného exportu. Archivovaný `Losminek/netkit-ios` zůstává jen pro čtení jako historie MVP.
 
 Na macOS lze pro simulátor spustit:
 
@@ -337,9 +341,8 @@ nejde o ověření na fyzickém zařízení.
 O aplikaci poskytuje verzi, lokalizovaný odkaz na zásady a offline licence komponent.
 `IosAboutDomain.privacyUrl(language:)` přijímá jazykový kód: `cs` (bez ohledu na velikost
 písmen) vrátí `https://www.daniel.losak.cz/netkit/privacy`, ostatní kódy
-`https://www.daniel.losak.cz/en/netkit/privacy`. Zadáním zmíněné `localizedWebUrl` v tomto
-checkoutu neexistuje; iOS wrapper volí lokalizovanou základní URL a používá existující
-sdílené `privacyPolicyUrl` z `update/ProjectLinks.kt`. `commonMain` se v P3 nemění.
+`https://www.daniel.losak.cz/en/netkit/privacy`. Wrapper předává českou základní URL a lokalizaci
+provede sdílené `privacyPolicyUrl` (přes `localizedWebUrl`) z `update/ProjectLinks.kt`.
 Kotlin testy kontrolují českou variantu i anglický fallback bez síťového přístupu.
 
 MVP podporuje host keys Ed25519 a ECDSA; přihlášení klíčem v UI používá pouze v aplikaci

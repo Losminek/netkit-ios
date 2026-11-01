@@ -1,8 +1,12 @@
-name: iOS R1
+name: iOS
 
+# Public repositories run this automatically (standard runners are free there).
+# The private development repository runs it only manually (macOS minutes count 10x
+# against its quota): Actions > iOS > Run workflow after changes to iosApp/, iosMain
+# or shared code that iosMain calls.
 on:
   push:
-    branches: ["codex/**"]
+    branches: [main, "codex/**"]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -20,6 +24,7 @@ defaults:
 
 jobs:
   linux:
+    if: github.event_name == 'workflow_dispatch' || github.event.repository.private == false
     name: Linux Android regression
     runs-on: ubuntu-24.04
     timeout-minutes: 40
@@ -43,6 +48,7 @@ jobs:
           testDebugUnitTest :shared:allTests lintDebug assembleDebug
 
   simulator:
+    if: github.event_name == 'workflow_dispatch' || github.event.repository.private == false
     name: ARM iOS simulator
     runs-on: macos-15
     timeout-minutes: 60
