@@ -15,6 +15,12 @@ data class IosSshImportResult(val imported: SshProfileImport?, val failure: SshP
 data class IosSshPlanResult(val plan: SshImportPlan?, val failure: SshProfileImportFailure?)
 data class IosSshImportApplyResult(val data: SshData?, val failure: SshProfileImportFailure?)
 data class IosSshEndpointChange(val profileId: String, val before: String, val after: String)
+enum class IosSshExportFailure { DUPLICATE_NAMES, TOO_LARGE, INVALID_DATA }
+data class IosSshExportResult(val bytes: ByteArray?, val failure: IosSshExportFailure?, val duplicateNames: List<String> = emptyList())
+enum class IosSshImportField { HOST, PORT, USERNAME, AUTHENTICATION, STARTUP_COMMAND, KEEPALIVE_SECONDS }
+data class IosSshFieldChange(val field: IosSshImportField, val before: String, val after: String)
+data class IosSshImportPreview(val before: SshProfile?, val after: SshProfile,
+    val changes: List<IosSshFieldChange>, val startupWarning: Boolean, val needsKeySelection: Boolean)
 
 /** Synchronous value operations. Swift serializes metadata transactions and writes atomically. */
 class IosSshDomain {
@@ -42,6 +48,21 @@ class IosSshDomain {
 
     fun encodeData(data: SshData): ByteArray? = if (!data.valid()) null else
         json.encodeToString(SshData.serializer(), data).encodeToByteArray().takeIf { it.size <= 1_048_576 }
+
+    /** Swift must obtain validated, frozen bytes before presenting the file exporter. */
+    fun prepareExport(data: SshData): IosSshExportResult = try {
+        IosSshExportResult(encodeSshProfileExport(data), null)
+    } catch (error: SshProfileExportException) {
+        when (val reason = error.reason) {
+            is SshProfileExportError.DuplicateNames -> IosSshExportResult(null, IosSshExportFailure.DUPLICATE_NAMES, reason.names)
+            SshProfileExportError.TooLarge -> IosSshExportResult(null, IosSshExportFailure.TOO_LARGE)
+        }
+    } catch (_: IllegalArgumentException) { IosSshExportResult(null, IosSshExportFailure.INVALID_DATA) }
+
+    fun moveProfile(data: SshData, id: String, delta: Int): IosSshDataResult =
+        if (!data.valid()) invalid(IosSshDataFailure.INVALID_DATA) else checked(moveSshProfile(data, id, delta))
+
+    fun needsKeySelection(profile: SshProfile, data: SshData): Boolean = profile.needsKeySelection(data)
 
     fun upsertProfile(data: SshData, profile: SshProfile): IosSshDataResult {
         if (!data.valid() || !profile.valid()) return invalid(IosSshDataFailure.INVALID_DATA)
@@ -110,6 +131,29 @@ class IosSshDomain {
     fun importAddedCount(plan: SshImportPlan): Int = plan.newProfiles.size
 
     fun importDetachedRefs(plan: SshImportPlan): List<String> = plan.detachedSecretRefs
+
+    /** Values stay unlocalized; Swift supplies CS/EN labels and authentication names. */
+    fun importProfilePreviews(plan: SshImportPlan, data: SshData): List<IosSshImportPreview> =
+        (plan.newProfiles + plan.updatedProfiles + plan.unchangedProfiles).map { entry ->
+            val before = entry.before
+            val after = entry.after
+            val changes = buildList {
+                fun change(field: IosSshImportField, old: String, updated: String) {
+                    if (old != updated) add(IosSshFieldChange(field, old, updated))
+                }
+                if (before != null) {
+                    change(IosSshImportField.HOST, before.host, after.host)
+                    change(IosSshImportField.PORT, before.port.toString(), after.port.toString())
+                    change(IosSshImportField.USERNAME, before.username, after.username)
+                    change(IosSshImportField.AUTHENTICATION, before.authentication.name, after.authentication.name)
+                    change(IosSshImportField.STARTUP_COMMAND, before.startupCommand, after.startupCommand)
+                    change(IosSshImportField.KEEPALIVE_SECONDS, before.keepaliveSeconds.toString(), after.keepaliveSeconds.toString())
+                }
+            }
+            IosSshImportPreview(before, after, changes,
+                if (before == null) after.startupCommand.isNotEmpty() else before.startupCommand != after.startupCommand,
+                after.needsKeySelection(data))
+        }
 
     fun importChangedEndpoints(plan: SshImportPlan): List<IosSshEndpointChange> =
         plan.updatedProfiles.mapNotNull { entry ->

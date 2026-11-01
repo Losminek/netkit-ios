@@ -86,13 +86,27 @@ final class SshMetadataStore {
     func deleteProfile(id: String) throws { try update { domain.deleteProfile(data: $0, id: id) } }
     func deleteKey(id: String) throws { try update { domain.deleteKey(data: $0, id: id) } }
 
-    func previewImport(_ raw: Data) throws -> SshImportPlan {
+    func moveProfile(id: String, delta: Int32) throws {
+        try update { domain.moveProfile(data: $0, id: id, delta: delta) }
+    }
+
+    func prepareExport() -> IosSshExportResult {
+        lock.lock(); defer { lock.unlock() }
+        return domain.prepareExport(data: data)
+    }
+
+    func previewImport(_ raw: Data, keyRef: String? = nil) throws -> SshImportPlan {
         guard raw.count <= 256 * 1024 else { throw Failure.invalid }
         let bytes = KotlinByteArray(size: Int32(raw.count))
         for (index, value) in raw.enumerated() { bytes.set(index: Int32(index), value: Int8(bitPattern: value)) }
         guard let parsed = domain.decodeImport(bytes: bytes).imported else { throw Failure.invalid }
+        return try planImport(parsed, keyRef: keyRef)
+    }
+
+    func planImport(_ imported: SshProfileImport, keyRef: String?) throws -> SshImportPlan {
         lock.lock(); defer { lock.unlock() }
-        guard let plan = domain.planImport(current: data, imported: parsed, keyRef: nil,
+        if let keyRef, !data.keys.contains(where: { $0.id == keyRef }) { throw Failure.invalid }
+        guard let plan = domain.planImport(current: data, imported: imported, keyRef: keyRef,
                                            generateId: { UUID().uuidString }).plan else { throw Failure.invalid }
         return plan
     }

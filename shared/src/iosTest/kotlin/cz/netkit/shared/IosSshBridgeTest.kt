@@ -170,6 +170,114 @@ class IosSshBridgeTest {
         assertTrue(domain.importDetachedRefs(unchanged).isEmpty())
     }
 
+    @Test fun v2ExportIsPortableOrderedAndUsesTypedFailures() {
+        val first = profile(secretRef = "credential-a").copy(keyRef = "key-a", startupCommand = "show version")
+        val second = first.copy(id = "profile-b", name = "Second", authentication = SshAuthentication.KEY)
+        val data = SshData(profiles = listOf(first, second), keys = listOf(SshKeyInfo("key-a", "Key", "public")),
+            hostKeys = listOf(key("runtime-public")))
+        val exported = domain.prepareExport(data)
+        assertNull(exported.failure)
+        val bytes = assertNotNull(exported.bytes)
+        val text = bytes.decodeToString()
+        assertTrue(text.contains("\"schema\":2"))
+        for (field in listOf("id", "secretRef", "keyRef", "keys", "hostKeys", "rejectedHostKeys"))
+            assertFalse(text.contains("\"$field\""), field)
+        assertEquals(listOf(first.name, second.name), assertNotNull(domain.decodeImport(bytes).imported).profiles.map { it.alias })
+        val duplicates = domain.prepareExport(data.copy(profiles = listOf(first, second.copy(name = first.name))))
+        assertEquals(IosSshExportFailure.DUPLICATE_NAMES, duplicates.failure)
+        assertEquals(listOf(first.name), duplicates.duplicateNames)
+        assertNull(duplicates.bytes)
+        val large = SshData(profiles = (1..100).map { first.copy(id = "p-$it", name = "Target $it", startupCommand = "x".repeat(4096)) })
+        assertEquals(IosSshExportFailure.TOO_LARGE, domain.prepareExport(large).failure)
+        assertNull(domain.prepareExport(large).bytes)
+        assertEquals(IosSshExportFailure.INVALID_DATA, domain.prepareExport(data.copy(schema = 2)).failure)
+    }
+
+    @Test fun profileMovementPreservesMetadataAndRoundTripsInExportOrder() {
+        val first = profile(secretRef = "credential-a")
+        val second = first.copy(id = "profile-b", name = "Second")
+        val original = SshData(profiles = listOf(first, second), hostKeys = listOf(key("public")))
+        assertEquals(original, domain.moveProfile(original, first.id, -1).data)
+        assertEquals(original, domain.moveProfile(original, second.id, 1).data)
+        assertEquals(original, domain.moveProfile(original, "missing", 1).data)
+        assertEquals(original, domain.moveProfile(original, first.id, 2).data)
+        val moved = assertNotNull(domain.moveProfile(original, second.id, -1).data)
+        assertEquals(listOf(second, first), moved.profiles)
+        assertEquals(original.hostKeys, moved.hostKeys)
+        assertEquals(moved, domain.decodeData(assertNotNull(domain.encodeData(moved))).data)
+        val imported = assertNotNull(domain.decodeImport(assertNotNull(domain.prepareExport(moved).bytes)).imported)
+        assertEquals(listOf(second.name, first.name), imported.profiles.map { it.alias })
+        assertEquals(original, domain.moveProfile(moved, second.id, 1).data)
+    }
+
+    @Test fun v2PreviewIncludesEveryChangedFieldAndAuthenticationDetachesPassword() {
+        val current = SshData(profiles = listOf(profile(secretRef = "credential-a")))
+        val incoming = SshProfileImport(listOf(SshImportProfile("Test target", "192.0.2.2", 2222, "operator",
+            authentication = SshAuthentication.KEY, startupCommand = "show version", keepaliveSeconds = 60)), emptyList())
+        val plan = assertNotNull(domain.planImport(current, incoming, null) { "unused" }.plan)
+        val preview = domain.importProfilePreviews(plan, current).single()
+        assertEquals(IosSshImportField.entries, preview.changes.map { it.field })
+        assertEquals(listOf("192.0.2.1", "22", "tester", "PASSWORD", "", "30"), preview.changes.map { it.before })
+        assertEquals(listOf("192.0.2.2", "2222", "operator", "KEY", "show version", "60"), preview.changes.map { it.after })
+        assertTrue(preview.startupWarning)
+        assertTrue(preview.needsKeySelection)
+        val authOnly = incoming.copy(profiles = listOf(incoming.profiles.single().copy(host = "192.0.2.1", port = 22, username = "tester")))
+        val authPlan = assertNotNull(domain.planImport(current, authOnly, null) { "unused" }.plan)
+        assertEquals(listOf("credential-a"), domain.importDetachedRefs(authPlan))
+        assertNull(assertNotNull(domain.applyImport(current, authPlan).data).profiles.single().secretRef)
+        val keyed = SshData(profiles = listOf(profile().copy(authentication = SshAuthentication.KEY,
+            keyRef = "key-a", startupCommand = "show version")), keys = listOf(SshKeyInfo("key-a", "Key", "public")))
+        val passwordRow = SshImportProfile("Test target", "192.0.2.1", 22, "tester", authentication = SshAuthentication.PASSWORD)
+        val passwordPlan = assertNotNull(domain.planImport(keyed, SshProfileImport(listOf(passwordRow), emptyList()), null) { "unused" }.plan)
+        val passwordPreview = domain.importProfilePreviews(passwordPlan, keyed).single()
+        assertNull(passwordPreview.after.keyRef)
+        assertTrue(passwordPreview.startupWarning) // Clearing a command is still a command change.
+        assertFalse(passwordPreview.needsKeySelection)
+        assertTrue(domain.importDetachedRefs(passwordPlan).isEmpty())
+        assertEquals(keyed.keys, assertNotNull(domain.applyImport(keyed, passwordPlan).data).keys)
+    }
+
+    @Test fun v1V2AndLegacyRespectSelectedKeyAndRejectBackupMaterial() {
+        val row = """{"alias":"Target","host":"192.0.2.1","port":22,"username":"tester"}"""
+        val v1 = """{"format":"netkit-ssh-profiles","schema":1,"profiles":[$row],"skipped":[]}"""
+        val v2 = v1.replace("\"schema\":1", "\"schema\":2").replace("\"username\":\"tester\"",
+            "\"username\":\"tester\",\"authentication\":\"KEY\",\"startupCommand\":\"\",\"keepaliveSeconds\":30")
+        val legacy = """{"schema":1,"profiles":[{"id":"old-id","name":"Target","host":"192.0.2.1","port":22,"username":"tester","authentication":"KEY","secretRef":null,"keyRef":null,"startupCommand":"","keepaliveSeconds":30}],"keys":[],"hostKeys":[],"rejectedHostKeys":[]}"""
+        val current = SshData(keys = listOf(SshKeyInfo("key-a", "Key", "public")))
+        for (document in listOf(v1, v2, legacy)) {
+            val incoming = assertNotNull(domain.decodeImport(document.encodeToByteArray()).imported)
+            val withKey = assertNotNull(domain.planImport(current, incoming, "key-a") { "local-id" }.plan)
+            val preview = domain.importProfilePreviews(withKey, current).single()
+            assertNull(preview.before)
+            assertEquals("local-id", preview.after.id)
+            assertEquals(SshAuthentication.KEY, preview.after.authentication)
+            assertFalse(preview.needsKeySelection)
+            val withoutKey = assertNotNull(domain.planImport(current, incoming, null) { "local-id" }.plan)
+            val after = domain.importProfilePreviews(withoutKey, current).single()
+            assertEquals(if (document == v1) SshAuthentication.PASSWORD else SshAuthentication.KEY, after.after.authentication)
+            assertEquals(document != v1, after.needsKeySelection)
+        }
+        for (field in listOf("keys", "hostKeys", "rejectedHostKeys")) {
+            val backup = legacy.replace("\"$field\":[]", "\"$field\":[{}]")
+            assertNull(domain.decodeImport(backup.encodeToByteArray()).imported)
+        }
+        assertNull(domain.decodeImport(legacy.replace("\"keyRef\":null", "\"keyRef\":\"key-a\"").encodeToByteArray()).imported)
+        val passwordImport = assertNotNull(domain.decodeImport(v2.replace("\"KEY\"", "\"PASSWORD\"").encodeToByteArray()).imported)
+        val passwordPlan = assertNotNull(domain.planImport(current, passwordImport, "key-a") { "local-id" }.plan)
+        val passwordPreview = domain.importProfilePreviews(passwordPlan, current).single()
+        assertEquals(SshAuthentication.PASSWORD, passwordPreview.after.authentication)
+        assertNull(passwordPreview.after.keyRef)
+    }
+
+    @Test fun keySelectionDependsOnAuthenticationAndLiveKeyMetadata() {
+        val keyProfile = profile().copy(authentication = SshAuthentication.KEY)
+        val withOtherKey = SshData(keys = listOf(SshKeyInfo("key-b", "Other", "public")))
+        assertTrue(domain.needsKeySelection(keyProfile, withOtherKey))
+        assertTrue(domain.needsKeySelection(keyProfile.copy(keyRef = "deleted-key"), withOtherKey))
+        assertFalse(domain.needsKeySelection(keyProfile.copy(keyRef = "key-b"), withOtherKey))
+        assertFalse(domain.needsKeySelection(profile(), withOtherKey))
+    }
+
     private class MemorySecrets : IosSecretBackend {
         private val items = mutableMapOf<String, ByteArray>()
         var failure: SshFailure? = null
