@@ -41,6 +41,7 @@
 		000000000000000000000701 /* NIOCore in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000000000601 /* NIOCore */; };
 		000000000000000000000702 /* NIOPosix in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000000000602 /* NIOPosix */; };
 		000000000000000000000703 /* Crypto in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000000000603 /* Crypto */; };
+		000000000000000000000704 /* NIOFoundationCompat in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000000000604 /* NIOFoundationCompat */; };
 		000000000000000000000710 /* NIOSSH in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000000000610 /* NIOSSH */; };
 		000000000000000000000711 /* NIOCore in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000000000611 /* NIOCore */; };
 		000000000000000000000712 /* NIOPosix in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000000000612 /* NIOPosix */; };
@@ -162,6 +163,7 @@
 				000000000000000000000701 /* NIOCore in Frameworks */,
 				000000000000000000000702 /* NIOPosix in Frameworks */,
 				000000000000000000000703 /* Crypto in Frameworks */,
+				000000000000000000000704 /* NIOFoundationCompat in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -277,6 +279,7 @@
 				000000000000000000000601 /* NIOCore */,
 				000000000000000000000602 /* NIOPosix */,
 				000000000000000000000603 /* Crypto */,
+				000000000000000000000604 /* NIOFoundationCompat */,
 			);
 			productName = NetKit;
 			productReference = 000000000000000000000023 /* NetKit.app */;
@@ -479,6 +482,7 @@
 		000000000000000000000601 /* NIOCore */ = {isa = XCSwiftPackageProductDependency; package = 000000000000000000000501 /* swift-nio */; productName = NIOCore; };
 		000000000000000000000602 /* NIOPosix */ = {isa = XCSwiftPackageProductDependency; package = 000000000000000000000501 /* swift-nio */; productName = NIOPosix; };
 		000000000000000000000603 /* Crypto */ = {isa = XCSwiftPackageProductDependency; package = 000000000000000000000502 /* swift-crypto */; productName = Crypto; };
+		000000000000000000000604 /* NIOFoundationCompat */ = {isa = XCSwiftPackageProductDependency; package = 000000000000000000000501 /* swift-nio */; productName = NIOFoundationCompat; };
 		000000000000000000000610 /* NIOSSH */ = {isa = XCSwiftPackageProductDependency; package = 000000000000000000000500 /* swift-nio-ssh */; productName = NIOSSH; };
 		000000000000000000000611 /* NIOCore */ = {isa = XCSwiftPackageProductDependency; package = 000000000000000000000501 /* swift-nio */; productName = NIOCore; };
 		000000000000000000000612 /* NIOPosix */ = {isa = XCSwiftPackageProductDependency; package = 000000000000000000000501 /* swift-nio */; productName = NIOPosix; };
