@@ -52,6 +52,37 @@ private final class SshTestDiagnostics {
 }
 
 final class SshIntegrationTests: XCTestCase {
+    @MainActor
+    func testSceneLifecycleDisconnectsAfterInjectedSleepInclusiveDeadline() async throws {
+        let server = LocalSshServer()
+        try await server.start()
+        addTeardownBlock { try await server.stop() }
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let chain = KeychainSecrets(service: "cz.netkit.ios.tests." + UUID().uuidString)
+        defer { try? chain.deleteServiceItems() }
+        var now: Int64 = 1000
+        let model = SshViewModel(nowMillis: { now }, keychain: chain, directory: directory)
+        let credential = server.password
+        XCTAssertTrue(model.saveProfile(id: nil, name: "profile", host: "127.0.0.1", port: String(server.port),
+                                        username: server.username, keyRef: nil, password: credential))
+        let profile = try XCTUnwrap(model.data?.profiles.first)
+        model.connect(profile)
+        for _ in 0..<150 where model.hostPrompt == nil { try await Task.sleep(nanoseconds: 100_000_000) }
+        let prompt = try XCTUnwrap(model.hostPrompt)
+        model.answerHost(id: prompt.id, accept: true)
+        for _ in 0..<150 where !model.connected { try await Task.sleep(nanoseconds: 100_000_000) }
+        XCTAssertTrue(model.connected)
+        model.background()
+        now += 299_999
+        model.foreground()
+        XCTAssertTrue(model.connected)
+        model.background()
+        now += 300_000
+        model.foreground()
+        XCTAssertFalse(model.connected)
+    }
+
     private func store() throws -> SshMetadataStore {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
@@ -84,7 +115,7 @@ final class SshIntegrationTests: XCTestCase {
         let connected = expectation(description: "authenticated and shell ready")
         let echo = expectation(description: "PTY echo")
         var received = Data()
-        let validator = SshHostKeyValidator(endpoint: "127.0.0.1:\(server.port)", store: metadata) { _, algorithm, fingerprint, reply in
+        let validator = SshHostKeyValidator(endpoint: "127.0.0.1:\(server.port)", store: metadata) { _, algorithm, fingerprint, _, _, reply in
             XCTAssertEqual(algorithm, "ssh-ed25519")
             XCTAssertEqual(fingerprint, expectedFingerprint)
             approval.set(reply)
@@ -120,7 +151,7 @@ final class SshIntegrationTests: XCTestCase {
         let metadata = try store()
         let prompt = expectation(description: "host key prompt")
         let connected = expectation(description: "public key authentication")
-        let validator = SshHostKeyValidator(endpoint: "127.0.0.1:\(server.port)", store: metadata) { _, _, _, reply in
+        let validator = SshHostKeyValidator(endpoint: "127.0.0.1:\(server.port)", store: metadata) { _, _, _, _, _, reply in
             prompt.fulfill(); reply(true)
         }
         let keyBytes = try roundTripCredential(server.userKey.rawRepresentation)
@@ -142,7 +173,7 @@ final class SshIntegrationTests: XCTestCase {
         let metadata = try store()
         let initialPrompt = expectation(description: "first host key prompt")
         let firstConnected = expectation(description: "first connection")
-        let firstValidator = SshHostKeyValidator(endpoint: "127.0.0.1:\(port)", store: metadata) { _, _, _, reply in
+        let firstValidator = SshHostKeyValidator(endpoint: "127.0.0.1:\(port)", store: metadata) { _, _, _, _, _, reply in
             initialPrompt.fulfill(); reply(true)
         }
         let original = try SshTransport(host: "127.0.0.1", port: port, username: first.username,
@@ -165,7 +196,7 @@ final class SshIntegrationTests: XCTestCase {
         let changedValidator = SshHostKeyValidator(endpoint: "127.0.0.1:\(port)", store: metadata, onFailure: { failure in
             diagnostics.recordFailure(failure)
             if case .changed = failure { changedWarning.fulfill() }
-        }) { _, _, _, reply in
+        }) { _, _, _, _, _, reply in
             diagnostics.recordUnexpectedPrompt()
             unexpectedPrompt.fulfill(); reply(true)
         }
@@ -195,7 +226,7 @@ final class SshIntegrationTests: XCTestCase {
         let metadata = try store()
         let prompt = expectation(description: "host key prompt")
         let approval = PendingSshApproval()
-        let validator = SshHostKeyValidator(endpoint: "127.0.0.1:\(server.port)", store: metadata) { _, _, _, reply in
+        let validator = SshHostKeyValidator(endpoint: "127.0.0.1:\(server.port)", store: metadata) { _, _, _, _, _, reply in
             approval.set(reply); prompt.fulfill()
         }
         let transport = try SshTransport(host: "127.0.0.1", port: server.port, username: server.username,
@@ -220,7 +251,7 @@ final class SshIntegrationTests: XCTestCase {
         let validator = SshHostKeyValidator(endpoint: "127.0.0.1:\(server.port)", store: metadata,
                                              timeout: 0.25, onFailure: { error in
             if case .timeout = error { timedOut.fulfill() }
-        }) { _, _, _, _ in }
+        }) { _, _, _, _, _, _ in }
         let transport = try SshTransport(host: "127.0.0.1", port: server.port, username: server.username,
                                          credential: .password(server.password), validator: validator,
                                          output: { _ in }, state: { _ in })
@@ -238,7 +269,7 @@ final class SshIntegrationTests: XCTestCase {
         let metadata = try store()
         let connected = expectation(description: "shell ready")
         let closed = expectation(description: "remote child closed")
-        let validator = SshHostKeyValidator(endpoint: "127.0.0.1:\(server.port)", store: metadata) { _, _, _, reply in reply(true) }
+        let validator = SshHostKeyValidator(endpoint: "127.0.0.1:\(server.port)", store: metadata) { _, _, _, _, _, reply in reply(true) }
         let transport = try SshTransport(host: "127.0.0.1", port: server.port, username: server.username,
                                          credential: .password(server.password), validator: validator,
                                          output: { _ in }, state: { state in
@@ -259,7 +290,7 @@ final class SshIntegrationTests: XCTestCase {
         let metadata = try store()
         let prompt = expectation(description: "initial host prompt")
         let firstReady = expectation(description: "initial shell ready")
-        let firstValidator = SshHostKeyValidator(endpoint: "127.0.0.1:\(server.port)", store: metadata) { _, _, _, reply in
+        let firstValidator = SshHostKeyValidator(endpoint: "127.0.0.1:\(server.port)", store: metadata) { _, _, _, _, _, reply in
             prompt.fulfill(); reply(true)
         }
         let first = try SshTransport(host: "127.0.0.1", port: server.port, username: server.username,
@@ -272,7 +303,7 @@ final class SshIntegrationTests: XCTestCase {
         let unexpected = expectation(description: "trusted key must not prompt again")
         unexpected.isInverted = true
         let secondReady = expectation(description: "trusted reconnect shell ready")
-        let secondValidator = SshHostKeyValidator(endpoint: "127.0.0.1:\(server.port)", store: metadata) { _, _, _, reply in
+        let secondValidator = SshHostKeyValidator(endpoint: "127.0.0.1:\(server.port)", store: metadata) { _, _, _, _, _, reply in
             unexpected.fulfill(); reply(false)
         }
         let second = try SshTransport(host: "127.0.0.1", port: server.port, username: server.username,

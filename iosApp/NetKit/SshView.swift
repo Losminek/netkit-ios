@@ -7,9 +7,18 @@ private struct ProfileEdit: Identifiable {
     let profile: SshProfile?
 }
 
+@MainActor
+func sshHostPromptMessage(_ prompt: SshViewModel.HostPrompt) -> String {
+    var text = "\(prompt.endpoint)\n\(prompt.algorithm)\n\(prompt.fingerprint)"
+    if let previous = prompt.previousRejected {
+        text += "\n\(String(localized: "ssh.host.previously.rejected"))\n\(previous)"
+        if prompt.repeatedRejected { text += "\n\(String(localized: "ssh.host.rejected.again"))" }
+    }
+    return text
+}
+
 struct SshView: View {
-    @Environment(\.scenePhase) private var scenePhase
-    @StateObject private var model = SshViewModel()
+    @ObservedObject var model: SshViewModel
     @State private var editing: ProfileEdit?
     @State private var showImporter = false
     @State private var showImportConfirm = false
@@ -21,6 +30,8 @@ struct SshView: View {
     @State private var showPasteConfirm = false
     @State private var resetEndpoint: String?
     @State private var showReset = false
+    @State private var deleteProfile: SshProfile?
+    @State private var deleteKey: SshKeyInfo?
     @State private var columns = 80
     @State private var rows = 24
 
@@ -28,6 +39,13 @@ struct SshView: View {
         Form {
             Text("ssh.notice")
             if let error = model.error { Text(errorKey(error)).foregroundStyle(.red) }
+            if let changed = model.changedHost {
+                Section("ssh.host.changed.context") {
+                    Text(verbatim: changed.endpoint)
+                    LabeledContent("ssh.host.saved", value: changed.saved)
+                    LabeledContent("ssh.host.offered", value: changed.offered)
+                }
+            }
             Section("ssh.profiles") {
                 if let profiles = model.data?.profiles {
                     ForEach(profiles, id: \.id) { profile in
@@ -35,6 +53,8 @@ struct SshView: View {
                             Button(profile.name) { model.connect(profile) }.disabled(model.connected)
                             Spacer()
                             Button("ssh.edit") { editing = ProfileEdit(profile: profile) }.disabled(model.connected)
+                            Button(role: .destructive) { deleteProfile = profile } label: { Image(systemName: "trash") }
+                                .accessibilityLabel("ssh.profile.delete")
                         }
                     }
                     if profiles.isEmpty { Text("ssh.empty") }
@@ -45,6 +65,14 @@ struct SshView: View {
             Section("ssh.keys") {
                 TextField("ssh.key.name", text: $keyName)
                 Button("ssh.key.generate") { model.generateKey(name: keyName); keyName = "" }
+                ForEach(model.data?.keys ?? [], id: \.id) { key in
+                    HStack {
+                        Text(verbatim: key.name)
+                        Spacer()
+                        Button(role: .destructive) { deleteKey = key } label: { Image(systemName: "trash") }
+                            .accessibilityLabel("ssh.key.delete")
+                    }
+                }
                 if let publicKey = model.publicKey {
                     Text(verbatim: publicKey).textSelection(.enabled)
                     Button("ssh.key.copy") { UIPasteboard.general.setItems([[UTType.utf8PlainText.identifier: publicKey]], options: [.localOnly: true, .expirationDate: Date().addingTimeInterval(60)]) }
@@ -53,7 +81,15 @@ struct SshView: View {
             if let keys = model.data?.hostKeys, !keys.isEmpty {
                 Section("ssh.trusted") {
                     ForEach(keys, id: \.endpoint) { key in
-                        Button(key.endpoint) { resetEndpoint = key.endpoint; showReset = true }
+                        Button { resetEndpoint = key.endpoint; showReset = true } label: {
+                            VStack(alignment: .leading) {
+                                Text(verbatim: key.endpoint)
+                                LabeledContent("ssh.host.saved", value: key.fingerprint)
+                                if let rejected = model.data?.rejectedHostKeys.first(where: { $0.endpoint == key.endpoint }) {
+                                    LabeledContent("ssh.host.offered", value: rejected.fingerprint)
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -106,20 +142,27 @@ struct SshView: View {
             Button("ssh.host.accept") { model.answerHost(id: prompt.id, accept: true) }
             Button("ssh.host.reject", role: .cancel) { model.answerHost(id: prompt.id, accept: false) }
         } message: { prompt in
-            Text(verbatim: "\(prompt.endpoint)\n\(prompt.algorithm)\n\(prompt.fingerprint)")
+            Text(verbatim: sshHostPromptMessage(prompt))
         }
-        .confirmationDialog("ssh.import.preview", isPresented: $showImportConfirm, titleVisibility: .visible) {
-            Button("ssh.import.apply") { model.confirmImport() }
-            Button("network.cancel", role: .cancel) { model.importPlan = nil }
-        } message: {
-            if let plan = model.importPlan {
-                VStack(alignment: .leading) {
-                    LabeledContent("ssh.import.new", value: String(model.importAddedCount(plan)))
-                    LabeledContent("ssh.import.updated", value: String(plan.updatedProfiles.count))
-                    LabeledContent("ssh.import.unchanged", value: String(plan.unchangedProfiles.count))
-                    LabeledContent("ssh.import.skipped", value: String(plan.skipped.count))
-                    ForEach(Array(plan.skipped.enumerated()), id: \.offset) { _, entry in
-                        Text(verbatim: entry.alias + " — " + skipReason(entry.reason.name))
+        .sheet(isPresented: $showImportConfirm, onDismiss: { model.importPlan = nil }) {
+            NavigationStack {
+                if let plan = model.importPlan {
+                    List {
+                        LabeledContent("ssh.import.new", value: String(model.importAddedCount(plan)))
+                        LabeledContent("ssh.import.updated", value: String(plan.updatedProfiles.count))
+                        LabeledContent("ssh.import.unchanged", value: String(plan.unchangedProfiles.count))
+                        LabeledContent("ssh.import.skipped", value: String(plan.skipped.count))
+                        ForEach(model.importChanges(plan), id: \.profileId) { change in
+                            Text(verbatim: "\(change.before) → \(change.after)")
+                        }
+                        ForEach(Array(plan.skipped.enumerated()), id: \.offset) { _, entry in
+                            Text(verbatim: entry.alias + " — " + skipReason(entry.reason.name))
+                        }
+                    }
+                    .navigationTitle("ssh.import.preview")
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) { Button("network.cancel") { showImportConfirm = false } }
+                        ToolbarItem(placement: .confirmationAction) { Button("ssh.import.apply") { model.confirmImport(); showImportConfirm = false } }
                     }
                 }
             }
@@ -131,11 +174,25 @@ struct SshView: View {
         .confirmationDialog("ssh.trust.reset.warning", isPresented: $showReset, titleVisibility: .visible) {
             Button("ssh.trust.reset", role: .destructive) { if let endpoint = resetEndpoint { model.resetTrust(endpoint: endpoint) }; resetEndpoint = nil }
             Button("network.cancel", role: .cancel) { resetEndpoint = nil }
+        } message: {
+            if let endpoint = resetEndpoint, let key = model.data?.hostKeys.first(where: { $0.endpoint == endpoint }) {
+                Text(verbatim: trustResetMessage(key, rejected: model.data?.rejectedHostKeys.first(where: { $0.endpoint == endpoint })))
+            }
         }
-        .onChange(of: scenePhase) { _, phase in
-            if phase == .background { model.background() }
-            else if phase == .active { model.foreground() }
+        .confirmationDialog("ssh.profile.delete.confirm", isPresented: Binding(get: { deleteProfile != nil }, set: { if !$0 { deleteProfile = nil } }), titleVisibility: .visible, presenting: deleteProfile) { profile in
+            Button("ssh.profile.delete", role: .destructive) { model.deleteProfile(profile); deleteProfile = nil }
+            Button("network.cancel", role: .cancel) { deleteProfile = nil }
         }
+        .confirmationDialog("ssh.key.delete.confirm", isPresented: Binding(get: { deleteKey != nil }, set: { if !$0 { deleteKey = nil } }), titleVisibility: .visible, presenting: deleteKey) { key in
+            Button("ssh.key.delete", role: .destructive) { model.deleteKey(key); deleteKey = nil }
+            Button("network.cancel", role: .cancel) { deleteKey = nil }
+        }
+    }
+
+    private func trustResetMessage(_ key: TrustedHostKey, rejected: TrustedHostKey?) -> String {
+        var text = "\(key.endpoint)\n\(String(localized: "ssh.host.saved")): \(key.fingerprint)"
+        if let rejected { text += "\n\(String(localized: "ssh.host.offered")): \(rejected.fingerprint)" }
+        return text
     }
 
     private func sendKey(_ key: TerminalKey) {
@@ -160,6 +217,7 @@ struct SshView: View {
         case .storage: "ssh.error.storage"
         case .invalid: "ssh.error.invalid"
         case .credentials: "ssh.error.credentials"
+        case .keyInUse: "ssh.error.key.in.use"
         case .connection: "ssh.error.connection"
         case .algorithm: "ssh.error.algorithm"
         case .unsupportedCredential: "ssh.error.unsupported_credential"

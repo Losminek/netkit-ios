@@ -9,7 +9,7 @@ final class SshMetadataStore {
     private let directory: URL
     private var data: SshData
 
-    init(directory: URL? = nil) throws {
+    init(directory: URL? = nil, onFreshInstall: () throws -> Void = {}) throws {
         let domain = IosSshDomain()
         self.domain = domain
         guard let root = directory ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?.appendingPathComponent("NetKit", isDirectory: true) else { throw Failure.io }
@@ -28,7 +28,9 @@ final class SshMetadataStore {
         } catch let failure as Failure { throw failure
         } catch {
             guard WolPersistence.isMissingFile(error as NSError) else { throw Failure.io }
+            try onFreshInstall()
             self.data = domain.emptyData()
+            try persist(self.data)
         }
     }
 
@@ -40,6 +42,13 @@ final class SshMetadataStore {
     func decision(_ key: TrustedHostKey) -> HostKeyDecision {
         lock.lock(); defer { lock.unlock() }
         return domain.hostDecision(data: data, offered: key)
+    }
+
+    func rejectionContext(_ key: TrustedHostKey) -> (previous: TrustedHostKey?, repeated: Bool) {
+        lock.lock(); defer { lock.unlock() }
+        let previous = data.rejectedHostKeys.first { $0.endpoint == key.endpoint }
+        let distinct = domain.previousRejected(data: data, offered: key)
+        return (previous, previous != nil && distinct == nil)
     }
 
     func update(_ transform: (SshData) -> IosSshDataResult) throws {
@@ -73,6 +82,9 @@ final class SshMetadataStore {
     func save(key: SshKeyInfo) throws {
         try update { domain.upsertKey(data: $0, key: key) }
     }
+
+    func deleteProfile(id: String) throws { try update { domain.deleteProfile(data: $0, id: id) } }
+    func deleteKey(id: String) throws { try update { domain.deleteKey(data: $0, id: id) } }
 
     func previewImport(_ raw: Data) throws -> SshImportPlan {
         guard raw.count <= 256 * 1024 else { throw Failure.invalid }

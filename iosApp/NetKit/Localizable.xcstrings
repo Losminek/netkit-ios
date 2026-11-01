@@ -822,13 +822,13 @@
         "cs": {
           "stringUnit": {
             "state": "translated",
-            "value": "Používejte pouze zařízení a sítě, pro něž máte svolení. Podporován je unicast ve stejné Wi-Fi podsíti."
+            "value": "Používejte jen ve vlastní nebo povolené síti. iOS verze NetKitu podporuje pouze unicast v aktuální Wi-Fi síti. Pokud spící zařízení vypadne z ARP cache, paket nemusí dorazit ani po hlášení o odeslání."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Use only devices and networks you are authorized to access. Unicast within the same Wi-Fi subnet is supported."
+            "value": "Use only on networks you own or are authorized to use. NetKit for iOS supports only unicast on the current Wi-Fi network. If a sleeping device is absent from the ARP cache, the packet may not arrive even when sending is reported as successful."
           }
         }
       }
@@ -2173,6 +2173,230 @@
           "stringUnit": {
             "state": "translated",
             "value": "License texts"
+          }
+        }
+      }
+    },
+    "ssh.host.changed.context": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Změněný hostitelský klíč"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Changed host key"
+          }
+        }
+      }
+    },
+    "ssh.host.saved": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uložený otisk"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saved fingerprint"
+          }
+        }
+      }
+    },
+    "ssh.host.offered": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nabízený otisk"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Offered fingerprint"
+          }
+        }
+      }
+    },
+    "ssh.host.previously.rejected": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dříve odmítnutý otisk:"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Previously rejected fingerprint:"
+          }
+        }
+      }
+    },
+    "ssh.host.rejected.again": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pozor: tento klíč jste již odmítli."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Warning: you previously rejected this key."
+          }
+        }
+      }
+    },
+    "ssh.profile.delete": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Smazat profil"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete profile"
+          }
+        }
+      }
+    },
+    "ssh.profile.delete.confirm": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Smazat SSH profil?"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete SSH profile?"
+          }
+        }
+      }
+    },
+    "ssh.key.delete": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Smazat klíč"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete key"
+          }
+        }
+      }
+    },
+    "ssh.key.delete.confirm": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Smazat SSH klíč?"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete SSH key?"
+          }
+        }
+      }
+    },
+    "ssh.error.key.in.use": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Klíč používá některý profil. Nejprve jej odpojte."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A profile uses this key. Detach it first."
+          }
+        }
+      }
+    },
+    "network.permission": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chybí oprávnění k místní síti. Povolte jej v Nastavení iOS."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Local network access is denied. Enable it in iOS Settings."
+          }
+        }
+      }
+    },
+    "lan.reason.outside": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cíl neleží v aktuální Wi-Fi síti nebo její rozsah nelze zjistit."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The target is outside the current Wi-Fi network or its range is unavailable."
+          }
+        }
+      }
+    },
+    "lan.reason.nonprivate": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rozsah zahrnuje adresu mimo privátní, sdílené nebo link-local bloky."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The range includes an address outside private, shared or link-local blocks."
+          }
+        }
+      }
+    },
+    "lan.reason.ports": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skenujete větší počet portů."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You are scanning a large number of ports."
           }
         }
       }

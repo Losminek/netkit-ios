@@ -7,21 +7,24 @@ import NetKitShared
 /// Host-key validation is completed before NIOSSH can authenticate the user.
 final class SshHostKeyValidator: NIOSSHClientServerAuthenticationDelegate {
     enum Failure: Error { case invalid, changed, rejected, storage, cancelled, timeout }
-    typealias Confirmation = (_ endpoint: String, _ algorithm: String, _ fingerprint: String, _ reply: @escaping (Bool) -> Void) -> Void
+    typealias Confirmation = (_ endpoint: String, _ algorithm: String, _ fingerprint: String, _ previous: TrustedHostKey?, _ repeated: Bool, _ reply: @escaping (Bool) -> Void) -> Void
     private let endpoint: String
     private let store: SshMetadataStore
     private let prompt: Confirmation
     private let onFailure: (Failure) -> Void
+    private let onChanged: (TrustedHostKey, TrustedHostKey) -> Void
     private let timeout: TimeInterval
     private let lock = NSLock()
     private var pending: (UUID, EventLoopPromise<Void>)?
     private var closed = false
 
     init(endpoint: String, store: SshMetadataStore, timeout: TimeInterval = 180,
-         onFailure: @escaping (Failure) -> Void = { _ in }, prompt: @escaping Confirmation) {
+         onFailure: @escaping (Failure) -> Void = { _ in },
+         onChanged: @escaping (TrustedHostKey, TrustedHostKey) -> Void = { _, _ in }, prompt: @escaping Confirmation) {
         self.endpoint = endpoint
         self.store = store
         self.onFailure = onFailure
+        self.onChanged = onChanged
         self.timeout = timeout
         self.prompt = prompt
     }
@@ -44,9 +47,13 @@ final class SshHostKeyValidator: NIOSSHClientServerAuthenticationDelegate {
             if isClosed { promise.fail(Failure.cancelled) }
             else { promise.succeed(()) }
         case .changed:
-            do { try store.reject(offered); report(.changed); promise.fail(Failure.changed) }
-            catch { report(.storage); promise.fail(Failure.storage) }
+            let saved = store.snapshot().hostKeys.first { $0.endpoint == offered.endpoint }
+            try? store.reject(offered)
+            if let saved { DispatchQueue.main.async { self.onChanged(saved, offered) } }
+            report(.changed)
+            promise.fail(Failure.changed)
         case .unknown:
+            let context = store.rejectionContext(offered)
             let id = UUID()
             lock.lock()
             guard !closed, pending == nil else { lock.unlock(); promise.fail(Failure.cancelled); return }
@@ -54,7 +61,7 @@ final class SshHostKeyValidator: NIOSSHClientServerAuthenticationDelegate {
             lock.unlock()
             DispatchQueue.main.async { [weak self] in
                 guard let self, self.isPending(id) else { return }
-                self.prompt(self.endpoint, offered.algorithm, offered.fingerprint) { [weak self] accepted in
+                self.prompt(self.endpoint, offered.algorithm, offered.fingerprint, context.previous, context.repeated) { [weak self] accepted in
                     self?.answer(id: id, key: offered, accepted: accepted)
                 }
             }

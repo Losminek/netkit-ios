@@ -14,6 +14,7 @@ data class IosSshDataResult(val data: SshData?, val failure: IosSshDataFailure?)
 data class IosSshImportResult(val imported: SshProfileImport?, val failure: SshProfileImportFailure?)
 data class IosSshPlanResult(val plan: SshImportPlan?, val failure: SshProfileImportFailure?)
 data class IosSshImportApplyResult(val data: SshData?, val failure: SshProfileImportFailure?)
+data class IosSshEndpointChange(val profileId: String, val before: String, val after: String)
 
 /** Synchronous value operations. Swift serializes metadata transactions and writes atomically. */
 class IosSshDomain {
@@ -57,6 +58,21 @@ class IosSshDomain {
         return checked(data.copy(keys = updated))
     }
 
+    /** Metadata only: persist the result before deleting unreferenced Keychain material. */
+    fun deleteProfile(data: SshData, id: String): IosSshDataResult {
+        if (!data.valid()) return invalid(IosSshDataFailure.INVALID_DATA)
+        if (data.profiles.none { it.id == id }) return invalid(IosSshDataFailure.CONFLICT)
+        return checked(data.copy(profiles = data.profiles.filterNot { it.id == id }))
+    }
+
+    /** A key referenced by any profile cannot be removed, regardless of authentication mode. */
+    fun deleteKey(data: SshData, id: String): IosSshDataResult {
+        if (!data.valid()) return invalid(IosSshDataFailure.INVALID_DATA)
+        if (data.keys.none { it.id == id } || data.profiles.any { it.keyRef == id })
+            return invalid(IosSshDataFailure.CONFLICT)
+        return checked(data.copy(keys = data.keys.filterNot { it.id == id }))
+    }
+
     fun hostDecision(data: SshData, offered: TrustedHostKey): HostKeyDecision =
         hostKeyDecision(data.hostKeys.firstOrNull { it.endpoint == offered.endpoint }, offered)
 
@@ -92,6 +108,16 @@ class IosSshDomain {
 
     /** Avoid a Cocoa `new`-family getter name at the Swift preview boundary. */
     fun importAddedCount(plan: SshImportPlan): Int = plan.newProfiles.size
+
+    fun importDetachedRefs(plan: SshImportPlan): List<String> = plan.detachedSecretRefs
+
+    fun importChangedEndpoints(plan: SshImportPlan): List<IosSshEndpointChange> =
+        plan.updatedProfiles.mapNotNull { entry ->
+            val before = entry.before ?: return@mapNotNull null
+            val after = entry.after
+            if (before.host == after.host && before.port == after.port && before.username == after.username) null
+            else IosSshEndpointChange(after.id, "${before.username}@${before.endpoint}", "${after.username}@${after.endpoint}")
+        }
 
     fun kexAlgorithms(): List<String> = SshAlgorithms.kex
     fun hostKeyAlgorithms(): List<String> = SshAlgorithms.hostKeys

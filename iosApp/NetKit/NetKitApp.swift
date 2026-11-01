@@ -10,16 +10,27 @@ struct NetKitApp: App {
 }
 
 struct ContentView: View {
+    @Environment(\.scenePhase) private var scenePhase
+    @StateObject private var ssh = SshViewModel()
     var body: some View {
         TabView {
             NavigationStack { OverviewView() }
                 .tabItem { Label("tab.overview", systemImage: "wifi") }
             NavigationStack { LanView() }
                 .tabItem { Label("tab.devices", systemImage: "network") }
-            NavigationStack { SshView() }
+            NavigationStack { SshView(model: ssh) }
                 .tabItem { Label("tab.ssh", systemImage: "terminal") }
             NavigationStack { WolView() }
                 .tabItem { Label("tab.wol", systemImage: "power") }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .background { ssh.background() }
+            else if phase == .active { ssh.foreground() }
+        }
+        .overlay {
+            if scenePhase != .active {
+                Color(uiColor: .systemBackground).ignoresSafeArea()
+            }
         }
     }
 }

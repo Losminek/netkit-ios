@@ -1,4 +1,5 @@
 import CryptoKit
+import Darwin
 import Foundation
 import NetKitShared
 import NIOSSH
@@ -13,30 +14,42 @@ final class SshViewModel: ObservableObject {
         let endpoint: String
         let algorithm: String
         let fingerprint: String
+        let previousRejected: String?
+        let repeatedRejected: Bool
         let reply: (Bool) -> Void
     }
-    enum ErrorKind { case storage, invalid, credentials, connection, algorithm, unsupportedCredential, hostChanged, hostRejected, timeout, inputOverflow }
+    struct ChangedHost { let endpoint: String; let saved: String; let offered: String }
+    enum ErrorKind { case storage, invalid, credentials, keyInUse, connection, algorithm, unsupportedCredential, hostChanged, hostRejected, timeout, inputOverflow }
     @Published var data: SshData?
     @Published var error: ErrorKind?
     @Published var hostPrompt: HostPrompt?
+    @Published var changedHost: ChangedHost?
     @Published var connected = false
     @Published var terminalSnapshot: TerminalSnapshot?
     @Published var terminalRevision = 0
     @Published var importPlan: SshImportPlan?
     @Published var publicKey: String?
     private let domain = IosSshDomain()
-    private let credentialStore = IosSecretStoreAdapter(backend: KeychainSecretBackend())
+    private let credentialStore: IosSecretStoreAdapter
     private var store: SshMetadataStore?
     private var transport: SshSessionAdapter?
     private var terminal = IosTerminal(columns: 80, rows: 24)
     private var utf8Pending = Data()
     private var sessionID = UUID()
     private var activeProfile: SshProfile?
-    private let lifecycle = IosSshLifecycle(nowMillis: { KotlinLong(value: Int64(ProcessInfo.processInfo.systemUptime * 1000)) })
+    private let lifecycle: IosSshLifecycle
     private var backgroundTask: Task<Void, Never>?
 
-    init() {
-        do { let store = try SshMetadataStore(); self.store = store; data = store.snapshot() }
+    init(nowMillis: @escaping () -> Int64 = { Int64(clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW) / 1_000_000) },
+         keychain: KeychainSecrets = KeychainSecrets(), directory: URL? = nil) {
+        credentialStore = IosSecretStoreAdapter(backend: KeychainSecretBackend(keychain: keychain))
+        lifecycle = IosSshLifecycle(nowMillis: { KotlinLong(value: nowMillis()) })
+        do {
+            let store = try SshMetadataStore(directory: directory, onFreshInstall: { try keychain.deleteServiceItems() })
+            self.store = store; data = store.snapshot()
+            do { cleanupUnreferenced(try keychain.accountIDs()) }
+            catch { self.error = .credentials }
+        }
         catch { self.error = .storage }
     }
 
@@ -69,6 +82,7 @@ final class SshViewModel: ObservableObject {
                 try store.save(profile: profile)
             }
             data = store.snapshot(); error = nil
+            if let old = previous?.secretRef { cleanupUnreferenced([old]) }
             return true
         } catch { self.error = .storage; data = store.snapshot(); return false }
     }
@@ -106,7 +120,7 @@ final class SshViewModel: ObservableObject {
             credential = .password(password)
         }
         sessionID = UUID(); let id = sessionID
-        error = nil; activeProfile = profile; connected = false; utf8Pending = Data()
+        error = nil; changedHost = nil; activeProfile = profile; connected = false; utf8Pending = Data()
         terminal = IosTerminal(columns: 80, rows: 24); terminalSnapshot = terminal.snapshot(); terminalRevision += 1
         let validator = SshHostKeyValidator(endpoint: profile.endpoint, store: store,
             onFailure: { [weak self] failure in
@@ -117,9 +131,15 @@ final class SshViewModel: ObservableObject {
                 case .timeout: self.error = .timeout
                 default: self.error = .storage
                 }
-            }, prompt: { [weak self] endpoint, algorithm, fingerprint, reply in
+            }, onChanged: { [weak self] saved, offered in
+                guard let self, self.sessionID == id else { return }
+                self.changedHost = ChangedHost(endpoint: saved.endpoint, saved: saved.fingerprint, offered: offered.fingerprint)
+            }, prompt: { [weak self] endpoint, algorithm, fingerprint, previous, repeated, reply in
                 guard let self, self.sessionID == id else { reply(false); return }
-                self.hostPrompt = HostPrompt(endpoint: endpoint, algorithm: algorithm, fingerprint: fingerprint, reply: reply)
+                self.hostPrompt = HostPrompt(endpoint: endpoint, algorithm: algorithm, fingerprint: fingerprint,
+                                             previousRejected: previous?.fingerprint,
+                                             repeatedRejected: repeated,
+                                             reply: reply)
             })
         do {
             let session = try SshTransport(host: profile.host, port: Int(profile.port), username: profile.username,
@@ -245,6 +265,29 @@ final class SshViewModel: ObservableObject {
         catch { self.error = .storage }
     }
 
+    private func cleanupUnreferenced(_ candidates: [String]) {
+        guard let data else { return }
+        let inUse = Set(data.profiles.compactMap(\.secretRef) + data.profiles.compactMap(\.keyRef) + data.keys.map(\.id))
+        for ref in Set(candidates) where !inUse.contains(ref) {
+            if credentialStore.deleteSecret(id: ref) != nil { error = .credentials }
+        }
+    }
+
+    func deleteProfile(_ profile: SshProfile) {
+        guard let store else { error = .storage; return }
+        disconnect()
+        do { try store.deleteProfile(id: profile.id); data = store.snapshot(); error = nil
+            if let ref = profile.secretRef { cleanupUnreferenced([ref]) }
+        } catch { error = .storage }
+    }
+
+    func deleteKey(_ key: SshKeyInfo) {
+        guard let store else { error = .storage; return }
+        guard data?.profiles.contains(where: { $0.keyRef == key.id }) == false else { error = .keyInUse; return }
+        do { try store.deleteKey(id: key.id); data = store.snapshot(); error = nil; cleanupUnreferenced([key.id]) }
+        catch { error = .storage }
+    }
+
     func previewImport(_ url: URL) {
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
@@ -258,9 +301,12 @@ final class SshViewModel: ObservableObject {
     func importAddedCount(_ plan: SshImportPlan) -> Int32 { domain.importAddedCount(plan: plan) }
     func confirmImport() {
         guard let store, let plan = importPlan else { return }
-        do { try store.applyImport(plan); data = store.snapshot(); importPlan = nil }
+        do { try store.applyImport(plan); data = store.snapshot(); importPlan = nil; error = nil
+            cleanupUnreferenced(domain.importDetachedRefs(plan: plan)) }
         catch { self.error = .storage; importPlan = nil }
     }
+
+    func importChanges(_ plan: SshImportPlan) -> [IosSshEndpointChange] { domain.importChangedEndpoints(plan: plan) }
 
     private func toKotlin(_ data: Data) -> KotlinByteArray {
         let result = KotlinByteArray(size: Int32(data.count))

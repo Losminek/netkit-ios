@@ -58,6 +58,32 @@ final class KeychainSecrets {
         let status = SecItemDelete(try query(id) as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else { throw Failure.unavailable(status) }
     }
+
+    func deleteServiceItems() throws {
+        let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
+                                    kSecAttrService as String: service,
+                                    kSecAttrSynchronizable as String: false]
+        let status = SecItemDelete(query as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else { throw Failure.unavailable(status) }
+    }
+
+    func accountIDs() throws -> [String] {
+        let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
+                                    kSecAttrService as String: service,
+                                    kSecAttrSynchronizable as String: false,
+                                    kSecReturnAttributes as String: true,
+                                    kSecMatchLimit as String: kSecMatchLimitAll]
+        var result: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        if status == errSecItemNotFound { return [] }
+        guard status == errSecSuccess, let attributes = result as? [[String: Any]] else {
+            throw Failure.unavailable(status == errSecSuccess ? errSecDecode : status)
+        }
+        return try attributes.map {
+            guard let id = $0[kSecAttrAccount as String] as? String else { throw Failure.unavailable(errSecDecode) }
+            return id
+        }
+    }
 }
 
 import NetKitShared

@@ -133,6 +133,43 @@ class IosSshBridgeTest {
         assertEquals(IosSshDataFailure.INVALID_DATA, domain.upsertKey(withKey, SshKeyInfo("invalid/id", "Test", publicValue)).failure)
     }
 
+    @Test fun deletionPreservesReferencedKeysAndRejectsStaleOrInvalidMetadata() {
+        val publicValue = Random.nextBytes(32).joinToString("") { it.toUByte().toString(16) }
+        val original = SshData(profiles = listOf(profile().copy(keyRef = "key-a")),
+            keys = listOf(SshKeyInfo("key-a", "Test key", publicValue)))
+        assertEquals(IosSshDataFailure.CONFLICT, domain.deleteKey(original, "key-a").failure)
+        assertEquals(IosSshDataFailure.CONFLICT, domain.deleteProfile(original, "missing").failure)
+        val withoutProfile = assertNotNull(domain.deleteProfile(original, "profile-a").data)
+        assertTrue(withoutProfile.profiles.isEmpty())
+        assertEquals(original.keys, withoutProfile.keys)
+        val withoutKey = assertNotNull(domain.deleteKey(withoutProfile, "key-a").data)
+        assertTrue(withoutKey.keys.isEmpty())
+        assertEquals(IosSshDataFailure.CONFLICT, domain.deleteKey(withoutKey, "key-a").failure)
+        assertEquals(IosSshDataFailure.INVALID_DATA, domain.deleteProfile(original.copy(schema = 2), "profile-a").failure)
+        assertEquals(IosSshDataFailure.INVALID_DATA, domain.deleteKey(original.copy(schema = 2), "key-a").failure)
+        assertEquals("key-a", original.profiles.single().keyRef)
+    }
+
+    @Test fun importEndpointPreviewIncludesUserAndIpv6AndPreservesKeyReference() {
+        val originalProfile = profile(secretRef = "credential-a").copy(host = "2001:db8::1", keyRef = "key-a")
+        val before = SshData(profiles = listOf(originalProfile))
+        val incoming = SshProfileImport(listOf(SshImportProfile("Test target", "2001:db8::2", 2222, "operator")), emptyList())
+        val plan = assertNotNull(domain.planImport(before, incoming, null) { "profile-b" }.plan)
+        val change = domain.importChangedEndpoints(plan).single()
+        assertEquals("profile-a", change.profileId)
+        assertEquals("tester@[2001:db8::1]:22", change.before)
+        assertEquals("operator@[2001:db8::2]:2222", change.after)
+        assertEquals(listOf("credential-a"), domain.importDetachedRefs(plan))
+        val applied = assertNotNull(domain.applyImport(before, plan).data)
+        assertNull(applied.profiles.single().secretRef)
+        assertEquals("key-a", applied.profiles.single().keyRef)
+        val edited = assertNotNull(domain.upsertProfile(before, originalProfile.copy(host = "2001:db8::2")).data)
+        assertEquals("key-a", edited.profiles.single().keyRef)
+        val unchanged = assertNotNull(domain.planImport(applied, incoming, null) { "profile-b" }.plan)
+        assertTrue(domain.importChangedEndpoints(unchanged).isEmpty())
+        assertTrue(domain.importDetachedRefs(unchanged).isEmpty())
+    }
+
     private class MemorySecrets : IosSecretBackend {
         private val items = mutableMapOf<String, ByteArray>()
         var failure: SshFailure? = null
