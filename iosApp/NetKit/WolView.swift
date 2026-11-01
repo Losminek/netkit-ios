@@ -46,7 +46,6 @@ struct WolView: View {
     @State private var mac = ""
     @State private var host = ""
     @State private var port = "9"
-    @State private var broadcast = false
     @State private var selectedID: String?
     @State private var confirm = false
     @State private var deleteID: String?
@@ -59,11 +58,9 @@ struct WolView: View {
             Section("wol.add") {
                 TextField("wol.name", text: $name)
                 TextField("wol.mac", text: $mac).textInputAutocapitalization(.never).autocorrectionDisabled()
-                Toggle("wol.broadcast", isOn: $broadcast)
-                if broadcast { Text("wol.broadcast.unavailable") }
-                else { TextField("wol.host", text: $host).keyboardType(.numbersAndPunctuation) }
+                TextField("wol.host", text: $host).keyboardType(.numbersAndPunctuation)
                 TextField("lan.port", text: $port).keyboardType(.numberPad)
-                Button("wol.save") { model.add(name: name, mac: mac, host: host, port: port, broadcast: broadcast) }
+                Button("wol.save") { model.add(name: name, mac: mac, host: host, port: port, broadcast: false) }
                     .disabled(model.state.loadFailed || model.state.loading || model.state.saving)
                 if model.invalid { Text("network.invalid").foregroundStyle(.red) }
             }

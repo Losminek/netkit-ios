@@ -1,3 +1,4 @@
+import Darwin
 import Network
 import NetKitShared
 import SwiftUI
@@ -12,6 +13,8 @@ final class LanSession: ObservableObject {
     private var timer: DispatchWorkItem?
     private var ping: IcmpPing?
     private let domain = IosNetworkDomain()
+    private let wifi = WolPlatform()
+    var activeWifiCIDR: String? { wifi.activeWifiCIDR() }
 
     func cancel() {
         scan?.cancel()
@@ -25,6 +28,7 @@ final class LanSession: ObservableObject {
         browser?.cancel()
         browser = nil
         running = false
+        if status == String(localized: "network.running") || status == String(localized: "network.waiting") { status = "" }
     }
 
     private var scan: PortScan?
@@ -36,8 +40,9 @@ final class LanSession: ObservableObject {
             status = String(localized: "network.invalid")
             return
         }
+        let host = host.trimmingCharacters(in: .whitespacesAndNewlines)
         let ports = parsed.map { UInt16($0.intValue) }
-        let reasons = domain.confirmationReasons(address: host, ownCidr: nil, portCount: Int32(ports.count))
+        let reasons = domain.confirmationReasons(address: host, ownCidr: activeWifiCIDR, portCount: Int32(ports.count))
         guard !reasons.contains("INVALID_TARGET"), !reasons.contains("INVALID_PORT_COUNT") else {
             status = String(localized: "network.invalid")
             return
@@ -61,9 +66,11 @@ final class LanSession: ObservableObject {
 
     func dns(host: String, server: String, serverPort: UInt16 = 53) {
         cancel()
+        let host = host.trimmingCharacters(in: .whitespacesAndNewlines)
+        let server = server.trimmingCharacters(in: .whitespacesAndNewlines)
         let id = Int32.random(in: 0...65535)
         guard let query = domain.dnsQuery(host: host, type: 1, id: id),
-              !server.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              Self.validIPv4(server),
               let endpointPort = NWEndpoint.Port(rawValue: serverPort) else {
             status = String(localized: "network.invalid")
             return
@@ -113,6 +120,12 @@ final class LanSession: ObservableObject {
                         self.cancel()
                     }
                 })
+            case .waiting(let error) where Self.permissionDenied(error, connection: conn):
+                self.status = String(localized: "network.permission")
+                self.cancel()
+            case .failed(let error) where Self.permissionDenied(error, connection: conn):
+                self.status = String(localized: "network.permission")
+                self.cancel()
             case .failed:
                 self.status = String(localized: "network.failed")
                 self.cancel()
@@ -122,8 +135,26 @@ final class LanSession: ObservableObject {
         conn.start(queue: .main)
     }
 
+    static func validIPv4(_ value: String) -> Bool {
+        var address = in_addr()
+        return value.withCString { inet_pton(AF_INET, $0, &address) } == 1
+    }
+
+    static func permissionDenied(_ error: NWError, connection: NWConnection) -> Bool {
+        let denied = connection.currentPath?.unsatisfiedReason == .localNetworkDenied
+        return permissionDenied(error, localNetworkDenied: denied)
+    }
+
+    static func permissionDenied(_ error: NWError, localNetworkDenied: Bool) -> Bool {
+        if localNetworkDenied { return true }
+        if case .dns(let code) = error, code == -65570 { return true }
+        return false
+    }
+
     func pingHost(_ host: String) {
         cancel()
+        let host = host.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard Self.validIPv4(host) else { status = String(localized: "network.invalid"); return }
         running = true
         status = String(localized: "network.running")
         let probe = IcmpPing()
@@ -132,7 +163,7 @@ final class LanSession: ObservableObject {
             guard let self, let probe, self.ping === probe else { return }
             switch result {
             case .reply(let milliseconds):
-                self.status = String(localized: "lan.ping.reply") + " " + String(format: "%.1f ms", milliseconds)
+                self.status = String(localized: "lan.ping.reply") + " " + milliseconds.formatted(.number.precision(.fractionLength(1))) + " ms"
             case .timeout: self.status = String(localized: "network.timeout")
             case .invalid: self.status = String(localized: "network.failed")
             }
@@ -140,7 +171,7 @@ final class LanSession: ObservableObject {
         }
     }
 
-    func browse(loopbackOnly: Bool = false) {
+    func browse(loopbackOnly: Bool = false, stateObserver: ((NWBrowser.State) -> Void)? = nil) {
         cancel()
         results = []
         running = true
@@ -150,6 +181,7 @@ final class LanSession: ObservableObject {
         let browse = NWBrowser(for: .bonjour(type: "_ssh._tcp", domain: "local."), using: parameters)
         browser = browse
         browse.stateUpdateHandler = { [weak self, weak browse] state in
+            stateObserver?(state)
             guard let self, let browse, self.browser === browse else { return }
             switch state {
             case .waiting: self.status = String(localized: "network.waiting")
@@ -184,6 +216,26 @@ final class LanSession: ObservableObject {
     }
 }
 
+struct ScanConsent: Equatable {
+    let host: String
+    let ports: String
+    let cidr: String?
+
+    var reasons: [String] {
+        let domain = IosNetworkDomain()
+        return domain.confirmationReasons(address: host, ownCidr: cidr,
+                                          portCount: Int32(domain.ports(input: ports)?.count ?? 0))
+    }
+
+    func message(resolve: (String) -> String) -> String {
+        var lines = [resolve("lan.warning")]
+        if reasons.contains("OUTSIDE_WIFI") { lines.append(resolve("lan.reason.outside")) }
+        if reasons.contains("NON_PRIVATE_ADDRESS") { lines.append(resolve("lan.reason.nonprivate")) }
+        if reasons.contains("LARGE_PORT_SET") { lines.append(resolve("lan.reason.ports")) }
+        return lines.joined(separator: "\n")
+    }
+}
+
 struct LanView: View {
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var session = LanSession()
@@ -192,10 +244,16 @@ struct LanView: View {
     @State private var dnsServer = ""
     @State private var pending: Action?
     @State private var showingConsent = false
+    @State private var scanConsent: ScanConsent?
 
     private enum Action { case scan, dns, ping, browse }
+    private var currentScanConsent: ScanConsent {
+        ScanConsent(host: host.trimmingCharacters(in: .whitespacesAndNewlines),
+                    ports: port.trimmingCharacters(in: .whitespacesAndNewlines), cidr: session.activeWifiCIDR)
+    }
     private func request(_ action: Action) {
         pending = action
+        scanConsent = action == .scan ? currentScanConsent : nil
         showingConsent = true
     }
 
@@ -217,7 +275,14 @@ struct LanView: View {
         .confirmationDialog("lan.consent.title", isPresented: $showingConsent, titleVisibility: .visible) {
             Button("lan.consent.confirm") {
                 switch pending {
-                case .scan: session.scanPorts(host: host, input: port)
+                case .scan:
+                    let current = currentScanConsent
+                    if current != scanConsent {
+                        scanConsent = current
+                        DispatchQueue.main.async { showingConsent = true }
+                        return
+                    }
+                    session.scanPorts(host: current.host, input: current.ports)
                 case .dns: session.dns(host: host, server: dnsServer)
                 case .ping: session.pingHost(host)
                 case .browse: session.browse()
@@ -226,7 +291,10 @@ struct LanView: View {
                 pending = nil
             }
             Button("network.cancel", role: .cancel) { pending = nil }
-        } message: { Text("lan.warning") }
+        } message: {
+            Text(verbatim: scanConsent?.message { NSLocalizedString($0, comment: "") }
+                 ?? String(localized: "lan.warning"))
+        }
         .navigationTitle("tab.devices")
         .onChange(of: scenePhase) { _, phase in
             if phase == .background { session.cancel() }

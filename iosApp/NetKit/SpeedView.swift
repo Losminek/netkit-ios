@@ -26,7 +26,7 @@ protocol SpeedTransport {
 }
 
 final class SpeedHTTP: SpeedTransport {
-    enum Failure: Error { case invalidResponse, responseTooLarge }
+    enum Failure: Error { case invalidResponse, responseTooLarge, payloadTooLarge }
     private let configuration: URLSessionConfiguration
     init(configuration: URLSessionConfiguration = .ephemeral) {
         self.configuration = configuration
@@ -88,7 +88,8 @@ private final class SpeedHTTPTask: NSObject, URLSessionDataDelegate {
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse,
                     completionHandler: @escaping (URLSession.ResponseDisposition) -> Void) {
         guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-            failure = SpeedHTTP.Failure.invalidResponse; completionHandler(.cancel); return
+            failure = (response as? HTTPURLResponse)?.statusCode == 413 ? SpeedHTTP.Failure.payloadTooLarge : SpeedHTTP.Failure.invalidResponse
+            completionHandler(.cancel); return
         }
         self.response = http
         if case .download = mode {
@@ -140,6 +141,21 @@ struct SpeedResult {
 
 enum SpeedFailure: Error { case invalidServer, invalidResponse, incomplete, random }
 
+final class UploadSizing {
+    private let lock = NSLock()
+    private var size = 8 * 1_048_576
+    private var accepted = false
+    func current() -> Int { lock.lock(); defer { lock.unlock() }; return size }
+    func markAccepted() { lock.lock(); accepted = true; lock.unlock() }
+    func reduce(after attempted: Int) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        if attempted > size { return true }
+        guard !accepted, attempted > 256 * 1024 else { return false }
+        if size == attempted { size = attempted / 2 }
+        return true
+    }
+}
+
 /// Parallel HTTP transfers; URLSession may multiplex them over HTTP/2 or HTTP/3.
 final class LibreSpeedClient {
     private let http: any SpeedTransport
@@ -174,6 +190,7 @@ final class LibreSpeedClient {
         let trace = domain.createTrace()
         let start = ProcessInfo.processInfo.systemUptime
         let streamCount = download ? 6 : 3
+        let sizing = UploadSizing()
         try await withThrowingTaskGroup(of: Void.self) { group in
             for _ in 0..<streamCount {
                 group.addTask { [self] in
@@ -189,7 +206,13 @@ final class LibreSpeedClient {
                             } else {
                                 request.httpMethod = "POST"
                                 request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
-                                try await http.upload(request, payload: payload, counter: counter)
+                                let size = sizing.current()
+                                do {
+                                    try await http.upload(request, payload: Data(payload.prefix(size)), counter: counter)
+                                    sizing.markAccepted()
+                                } catch SpeedHTTP.Failure.payloadTooLarge {
+                                    guard sizing.reduce(after: size) else { throw SpeedHTTP.Failure.payloadTooLarge }
+                                }
                             }
                         }
                     } catch {
@@ -458,8 +481,8 @@ struct SpeedView: View {
             }
             if model.failed { Text("speed.error").foregroundStyle(.red) }
             if let result = model.result {
-                LabeledContent("speed.download", value: String(format: "%.2f Mbit/s", result.downloadMbps))
-                LabeledContent("speed.upload", value: String(format: "%.2f Mbit/s", result.uploadMbps))
+                LabeledContent("speed.download", value: result.downloadMbps.formatted(.number.precision(.fractionLength(2))) + " Mbit/s")
+                LabeledContent("speed.upload", value: result.uploadMbps.formatted(.number.precision(.fractionLength(2))) + " Mbit/s")
             }
         }
         .navigationTitle("speed.title")

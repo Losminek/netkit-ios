@@ -96,6 +96,42 @@ private final class FakeSpeedTransport: SpeedTransport {
     }
 }
 
+private final class LimitedUploadTransport: SpeedTransport {
+    private let lock = NSLock()
+    private var sizes: [Int] = []
+    enum Mode { case limited, always413, otherFailure }
+    let mode: Mode
+    init(mode: Mode = .limited) { self.mode = mode }
+    private func record(_ size: Int) { lock.lock(); sizes.append(size); lock.unlock() }
+    func attemptedSizes() -> [Int] { lock.lock(); defer { lock.unlock() }; return sizes }
+    func read(_ request: URLRequest, limit: Int) async throws -> (Data, HTTPURLResponse) {
+        (Data(), HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+    }
+    func download(_ request: URLRequest, counter: SpeedCounter) async throws {
+        try await Task.sleep(nanoseconds: 50_000_000); counter.add(100_000)
+    }
+    func upload(_ request: URLRequest, payload: Data, counter: SpeedCounter) async throws {
+        record(payload.count)
+        if mode == .otherFailure { throw SpeedHTTP.Failure.invalidResponse }
+        if mode == .always413 || payload.count > 256 * 1024 { throw SpeedHTTP.Failure.payloadTooLarge }
+        try await Task.sleep(nanoseconds: 50_000_000); counter.add(Int64(payload.count))
+    }
+}
+
+private actor AsyncTestSignal {
+    private var signaled = false
+    private var waiter: CheckedContinuation<Void, Never>?
+    func wait() async {
+        if signaled { return }
+        await withCheckedContinuation { waiter = $0 }
+    }
+    func signal() {
+        signaled = true
+        waiter?.resume()
+        waiter = nil
+    }
+}
+
 private final class FakeNdtSocket: NdtSocket {
     enum End: Error { case broken }
     private let lock = NSLock()
@@ -105,6 +141,9 @@ private final class FakeNdtSocket: NdtSocket {
     private var normal = false
     private var sendFailedBeforeReader = false
     private var readerFinished = false
+    private let sendFailureSignal = AsyncTestSignal()
+    private var startedAt: TimeInterval = 0
+    private var appInfoDelivered = false
     let download: Bool
     let failAfterData: Bool
     let streaming: Bool
@@ -117,13 +156,22 @@ private final class FakeNdtSocket: NdtSocket {
         self.closeDuringUpload = closeDuringUpload; self.failOpen = failOpen; self.noData = noData
     }
     var normalClosure: Bool { lock.lock(); defer { lock.unlock() }; return normal }
-    func open() async throws { if failOpen { throw End.broken } }
+    func open() async throws {
+        if failOpen { throw End.broken }
+        lock.lock(); startedAt = ProcessInfo.processInfo.systemUptime; lock.unlock()
+    }
     private func nextRead() -> Int { lock.lock(); defer { lock.unlock() }; reads += 1; return reads }
     private func recordSend() { lock.lock(); sends += 1; lock.unlock() }
     func state() -> (Int, Bool) { lock.lock(); defer { lock.unlock() }; return (sends, closed) }
     func readCount() -> Int { lock.lock(); defer { lock.unlock() }; return reads }
     func wasSendFailureFirst() -> Bool { lock.lock(); defer { lock.unlock() }; return sendFailedBeforeReader }
-    private func markNormal() { lock.lock(); normal = true; lock.unlock() }
+    private func markAppInfoDelivered() { lock.lock(); appInfoDelivered = true; lock.unlock() }
+    private func considerNormalClose() {
+        lock.lock(); defer { lock.unlock() }
+        // open() starts this clock just before the client starts its own; leave a margin over 95%.
+        if closeDuringUpload && appInfoDelivered && sends > 1 &&
+            ProcessInfo.processInfo.systemUptime - startedAt >= 3 * 0.96 { normal = true }
+    }
     private func markReaderFinished() { lock.lock(); readerFinished = true; lock.unlock() }
     private func checkSendFailure() -> Bool {
         lock.lock(); defer { lock.unlock() }
@@ -138,6 +186,7 @@ private final class FakeNdtSocket: NdtSocket {
         }
         if number == 1 {
             if download { return .data(Data(repeating: 42, count: 1_048_576)) }
+            markAppInfoDelivered()
             return .string(#"{"AppInfo":{"ElapsedTime":1000000,"NumBytes":1000000}}"#)
         }
         if failAfterData { throw End.broken }
@@ -146,9 +195,7 @@ private final class FakeNdtSocket: NdtSocket {
             return .data(Data(repeating: 42, count: 65_536))
         }
         if !download && closeDuringUpload {
-            try await Task.sleep(nanoseconds: 2_860_000_000)
-            markNormal()
-            while !wasSendFailureFirst() { try await Task.sleep(nanoseconds: 1_000_000) }
+            await sendFailureSignal.wait()
             markReaderFinished()
             throw End.broken
         }
@@ -157,12 +204,60 @@ private final class FakeNdtSocket: NdtSocket {
     }
     func send(_ message: URLSessionWebSocketTask.Message) async throws {
         recordSend(); try await Task.sleep(nanoseconds: 10_000_000)
-        if checkSendFailure() { throw End.broken }
+        considerNormalClose()
+        if checkSendFailure() { await sendFailureSignal.signal(); throw End.broken }
     }
-    func close() { lock.lock(); closed = true; lock.unlock() }
+    func close() {
+        lock.lock(); closed = true; lock.unlock()
+        Task { await sendFailureSignal.signal() }
+    }
 }
 
 extension SpeedTests {
+    func testLibreSpeedReducesRejectedUploadToMinimum() async throws {
+        let transport = LimitedUploadTransport()
+        let result = try await LibreSpeedClient(http: transport, phaseDuration: 2.0)
+            .measure(input: "https://example.invalid/")
+        let sizes = transport.attemptedSizes()
+        XCTAssertTrue(sizes.contains(8 * 1_048_576))
+        XCTAssertTrue(sizes.contains(256 * 1024))
+        XCTAssertFalse(sizes.contains { $0 < 256 * 1024 })
+        XCTAssertGreaterThan(result.uploadMbps, 0)
+    }
+
+    func testUploadSizingIgnoresStale413AfterSmallerBodyAccepted() {
+        let sizing = UploadSizing()
+        let old = sizing.current()
+        XCTAssertTrue(sizing.reduce(after: old))
+        let smaller = sizing.current()
+        sizing.markAccepted()
+        XCTAssertTrue(sizing.reduce(after: old))
+        XCTAssertEqual(sizing.current(), smaller)
+        XCTAssertFalse(sizing.reduce(after: smaller))
+    }
+
+    func testPermanent413StopsAtMinimumAndFails() async throws {
+        let transport = LimitedUploadTransport(mode: .always413)
+        do {
+            _ = try await LibreSpeedClient(http: transport, phaseDuration: 2.0).measure(input: "https://example.invalid/")
+            XCTFail("Permanent 413 must fail the measurement")
+        } catch SpeedFailure.incomplete { }
+        let sizes = transport.attemptedSizes()
+        XCTAssertTrue(sizes.contains(256 * 1024))
+        XCTAssertFalse(sizes.contains { $0 < 256 * 1024 })
+        XCTAssertLessThanOrEqual(sizes.count, 18)
+    }
+
+    func testNon413DoesNotRetrySmallerBodies() async throws {
+        let transport = LimitedUploadTransport(mode: .otherFailure)
+        do {
+            _ = try await LibreSpeedClient(http: transport, phaseDuration: 2.0).measure(input: "https://example.invalid/")
+            XCTFail("A non-413 failure must fail the measurement")
+        } catch SpeedFailure.incomplete { }
+        XCTAssertFalse(transport.attemptedSizes().isEmpty)
+        XCTAssertTrue(transport.attemptedSizes().allSatisfy { $0 == 8 * 1_048_576 })
+    }
+
     func testLibreSpeedRunsBothDirectionsAndFailsClosed() async throws {
         let fake = FakeSpeedTransport()
         let result = try await LibreSpeedClient(http: fake, phaseDuration: 1.5).measure(input: "https://example.invalid/")

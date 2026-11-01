@@ -6,6 +6,67 @@ import XCTest
 import NetKitShared
 
 final class LanTests: XCTestCase {
+    func testScanConcurrencyAndPortLimit() {
+        let scan = PortScan(host: "127.0.0.1", ports: Array(1...64).map(UInt16.init))
+        scan.start { _, _, _ in }
+        XCTAssertEqual(scan.peakActive, 4)
+        scan.cancel()
+        let rejected = PortScan(host: "127.0.0.1", ports: Array(1...65).map(UInt16.init))
+        var completed = false
+        rejected.start { _, result, done in
+            completed = done
+            XCTAssertEqual(result, String(localized: "network.invalid"))
+        }
+        XCTAssertTrue(completed)
+        XCTAssertEqual(rejected.peakActive, 0)
+    }
+
+    func testInputValidationAndCancellationStatus() {
+        let session = LanSession()
+        session.pingHost(" not-an-ip ")
+        XCTAssertFalse(session.running)
+        XCTAssertEqual(session.status, String(localized: "network.invalid"))
+        session.dns(host: "example.invalid", server: "not-an-ip")
+        XCTAssertFalse(session.running)
+        XCTAssertEqual(session.status, String(localized: "network.invalid"))
+        session.browse(loopbackOnly: true)
+        session.cancel()
+        XCTAssertEqual(session.status, "")
+    }
+
+    func testConfirmationReasonsUseWifiCIDR() {
+        let domain = IosNetworkDomain()
+        let within = domain.confirmationReasons(address: "192.0.2.2", ownCidr: "192.0.2.1/24", portCount: 1)
+        XCTAssertFalse(within.contains("OUTSIDE_WIFI"))
+        XCTAssertTrue(within.contains("NON_PRIVATE_ADDRESS"))
+        let outside = domain.confirmationReasons(address: "198.51.100.1", ownCidr: "192.0.2.1/24", portCount: 1)
+        XCTAssertTrue(outside.contains("OUTSIDE_WIFI"))
+    }
+
+    func testPermissionDeniedClassification() {
+        XCTAssertTrue(LanSession.permissionDenied(.dns(-65570), localNetworkDenied: false))
+        XCTAssertTrue(LanSession.permissionDenied(.posix(.EHOSTUNREACH), localNetworkDenied: true))
+        XCTAssertFalse(LanSession.permissionDenied(.posix(.EHOSTUNREACH), localNetworkDenied: false))
+        XCTAssertFalse(LanSession.permissionDenied(.dns(-65537), localNetworkDenied: false))
+    }
+
+    func testScanConsentTracksAllInputsAndLocalizedReasons() throws {
+        let consent = ScanConsent(host: "192.0.2.1", ports: "22", cidr: "198.51.100.1/24")
+        XCTAssertNotEqual(consent, ScanConsent(host: "192.0.2.2", ports: "22", cidr: consent.cidr))
+        XCTAssertNotEqual(consent, ScanConsent(host: consent.host, ports: "23", cidr: consent.cidr))
+        XCTAssertNotEqual(consent, ScanConsent(host: consent.host, ports: consent.ports, cidr: nil))
+        for language in ["cs", "en"] {
+            let path = try XCTUnwrap(Bundle.main.path(forResource: language, ofType: "lproj"))
+            let bundle = try XCTUnwrap(Bundle(path: path))
+            let resolve = { (key: String) in bundle.localizedString(forKey: key, value: nil, table: nil) }
+            let message = consent.message(resolve: resolve)
+            for key in ["lan.warning", "lan.reason.outside", "lan.reason.nonprivate"] {
+                XCTAssertNotEqual(resolve(key), key)
+                XCTAssertTrue(message.contains(resolve(key)), "Missing \(key) for \(language)")
+            }
+        }
+    }
+
     func testTCPListenerAndClosedPort() throws {
         let parameters = NWParameters.tcp
         parameters.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: .any)
@@ -71,11 +132,14 @@ final class LanTests: XCTestCase {
 
     func testBonjourStartCanBeCancelled() {
         let session = LanSession()
-        session.browse(loopbackOnly: true)
+        let cancelled = expectation(description: "NWBrowser cancelled")
+        session.browse(loopbackOnly: true) { state in
+            if case .cancelled = state { cancelled.fulfill() }
+        }
         session.cancel()
         let drained = expectation(description: "callbacks after cancellation")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { drained.fulfill() }
-        wait(for: [drained], timeout: 2)
+        wait(for: [cancelled, drained], timeout: 2)
         XCTAssertFalse(session.running)
     }
 
@@ -157,6 +221,20 @@ final class WolDatagramTests: XCTestCase {
 }
 
 final class IcmpPingTests: XCTestCase {
+    func testCancelDuringProbeSuppressesCompletion() {
+        let ping = IcmpPing()
+        let started = expectation(description: "probe started")
+        let gate = DispatchSemaphore(value: 0)
+        let completed = expectation(description: "cancelled probe completion")
+        completed.isInverted = true
+        ping.onProbeStarted = { started.fulfill(); gate.wait() }
+        ping.start(address: "127.0.0.1") { _ in completed.fulfill() }
+        wait(for: [started], timeout: 5)
+        ping.cancel()
+        gate.signal()
+        wait(for: [completed], timeout: 0.3)
+    }
+
     func testRequestChecksumAndSharedReplyMatching() {
         let request = IcmpPing.makeRequest(payload: Array(repeating: 0x5a, count: 16))
         var sum: UInt32 = 0
@@ -305,6 +383,14 @@ final class WolPersistenceTests: XCTestCase {
 }
 
 final class WolAddressPolicyTests: XCTestCase {
+    func testNetworkIdentityChangesOnlyForInterfaceAddressOrMask() {
+        let a = WolPlatform.NetworkIdentity(interfaceIndex: 1, address: 0xc0000201, mask: 0xffffff00)
+        XCTAssertEqual(a, WolPlatform.NetworkIdentity(interfaceIndex: 1, address: 0xc0000201, mask: 0xffffff00))
+        XCTAssertNotEqual(a, WolPlatform.NetworkIdentity(interfaceIndex: 2, address: 0xc0000201, mask: 0xffffff00))
+        XCTAssertNotEqual(a, WolPlatform.NetworkIdentity(interfaceIndex: 1, address: 0xc0000202, mask: 0xffffff00))
+        XCTAssertNotEqual(a, WolPlatform.NetworkIdentity(interfaceIndex: 1, address: 0xc0000201, mask: 0xffff0000))
+    }
+
     func testOnlyLocalUnicastIsAllowed() {
         let address: UInt32 = 0xc000020a // 192.0.2.10
         let mask: UInt32 = 0xffffff00

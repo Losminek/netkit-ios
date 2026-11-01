@@ -8,6 +8,7 @@ enum IcmpResult { case reply(Double), timeout, invalid }
 final class IcmpPing {
     private let lock = NSLock()
     private var cancelled = false
+    var onProbeStarted: (() -> Void)?
 
     func cancel() {
         lock.lock()
@@ -67,6 +68,7 @@ final class IcmpPing {
         guard !isCancelled else { return .invalid }
         let sentAt = ProcessInfo.processInfo.systemUptime
         guard request.withUnsafeBytes({ send(fd, $0.baseAddress, $0.count, 0) }) == request.count else { return .invalid }
+        onProbeStarted?()
         let deadline = ProcessInfo.processInfo.systemUptime + 5
         while !isCancelled && ProcessInfo.processInfo.systemUptime < deadline {
             var descriptor = pollfd(fd: fd, events: Int16(POLLIN), revents: 0)

@@ -18,20 +18,41 @@ final class WolPlatform: NSObject, IosWolPlatform {
         super.init()
         monitor.pathUpdateHandler = { [weak self] path in
             guard let self else { return }
+            let next: (NWInterface, UInt32, UInt32)?
+            if let interface = path.availableInterfaces.first(where: { $0.type == .wifi }),
+               let (address, mask) = Self.ipv4(interface: interface.name) {
+                next = (interface, address, mask)
+            } else { next = nil }
+            guard !Self.sameNetwork(self.current, next) else { return }
+            self.current = next
             self.epoch = UUID().uuidString
-            self.current = nil
             let outstanding = Array(self.operations.values)
             self.operations.removeAll()
             outstanding.forEach { $0.networkLost() }
-            guard path.status == .satisfied, path.usesInterfaceType(.wifi),
-                  let interface = path.availableInterfaces.first(where: { $0.type == .wifi }),
-                  let (address, mask) = Self.ipv4(interface: interface.name) else { return }
-            self.current = (interface, address, mask)
         }
         monitor.start(queue: .main)
     }
 
     deinit { monitor.cancel() }
+
+    struct NetworkIdentity: Equatable {
+        let interfaceIndex: Int
+        let address: UInt32
+        let mask: UInt32
+    }
+
+    static func identity(_ value: (NWInterface, UInt32, UInt32)?) -> NetworkIdentity? {
+        value.map { NetworkIdentity(interfaceIndex: $0.0.index, address: $0.1, mask: $0.2) }
+    }
+
+    static func sameNetwork(_ lhs: (NWInterface, UInt32, UInt32)?, _ rhs: (NWInterface, UInt32, UInt32)?) -> Bool {
+        identity(lhs) == identity(rhs)
+    }
+
+    func activeWifiCIDR() -> String? {
+        guard let (_, address, mask) = current else { return nil }
+        return "\(Self.text(address))/\(mask.nonzeroBitCount)"
+    }
 
     func currentWifi() -> IosWifiSnapshot? {
         guard let (_, address, mask) = current else { return nil }

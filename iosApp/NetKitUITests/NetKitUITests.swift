@@ -33,6 +33,46 @@ final class NetKitUITests: XCTestCase {
         assertSshEmptyState(language: "cs", locale: "cs_CZ", addProfile: "Přidat profil", empty: "Zatím žádné SSH profily.")
     }
 
+    func testEnglishLanConsentAndWolWarning() {
+        assertLanConsentAndWolWarning(language: "en", locale: "en_US", devices: "Devices",
+            host: "Target or name", ports: "Ports", tcp: "Probe TCP ports", cancel: "Cancel",
+            reason: "The range includes an address outside private, shared or link-local blocks.",
+            warning: "Use only on networks you own or are authorized to use. NetKit for iOS supports only unicast on the current Wi-Fi network. If a sleeping device is absent from the ARP cache, the packet may not arrive even when sending is reported as successful.")
+    }
+
+    func testCzechLanConsentAndWolWarning() {
+        assertLanConsentAndWolWarning(language: "cs", locale: "cs_CZ", devices: "Zařízení",
+            host: "Cíl nebo název", ports: "Porty", tcp: "Prověřit TCP porty", cancel: "Zrušit",
+            reason: "Rozsah zahrnuje adresu mimo privátní, sdílené nebo link-local bloky.",
+            warning: "Používejte jen ve vlastní nebo povolené síti. iOS verze NetKitu podporuje pouze unicast v aktuální Wi-Fi síti. Pokud spící zařízení vypadne z ARP cache, paket nemusí dorazit ani po hlášení o odeslání.")
+    }
+
+    private func assertLanConsentAndWolWarning(language: String, locale: String, devices: String,
+                                              host: String, ports: String, tcp: String, cancel: String,
+                                              reason: String, warning: String) {
+        let app = launch(language: language, locale: locale)
+        let tabs = app.tabBars.firstMatch.buttons
+        XCTAssertTrue(tabs[devices].waitForExistence(timeout: 10))
+        tabs[devices].tap()
+        let hostField = app.textFields[host]
+        XCTAssertTrue(hostField.waitForExistence(timeout: 10))
+        hostField.tap()
+        hostField.typeText("192.0.2.1")
+        let portField = app.textFields[ports]
+        portField.tap()
+        portField.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 2) + "22")
+        app.buttons[tcp].tap()
+        let reasonText = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", reason)).firstMatch
+        XCTAssertTrue(reasonText.waitForExistence(timeout: 10))
+        XCTAssertTrue(reasonText.isHittable)
+        app.buttons[cancel].tap()
+        tabs["WoL"].tap()
+        let warningText = app.staticTexts[warning]
+        XCTAssertTrue(warningText.waitForExistence(timeout: 10))
+        XCTAssertTrue(warningText.isHittable)
+        XCTAssertFalse(app.switches["Broadcast"].exists)
+    }
+
     private func assertToolNavigation(language: String, locale: String, tabs: [String], tcp: String,
                                       devicesEmpty: String, wifiCheck: String, wifiEmpty: String, wifiUnavailable: String,
                                       speed: String, speedStart: String, wolSave: String, wolEmpty: String) {
