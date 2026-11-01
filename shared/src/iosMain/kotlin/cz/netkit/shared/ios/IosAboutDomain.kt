@@ -10,6 +10,6 @@ class IosAboutDomain {
         } else {
             "https://www.daniel.losak.cz/en/netkit"
         }
-        return privacyPolicyUrl(base, "https://github.com/Losminek/netkit-ios", language)
+        return privacyPolicyUrl(base, "https://github.com/Losminek/netkit", language)
     }
 }
