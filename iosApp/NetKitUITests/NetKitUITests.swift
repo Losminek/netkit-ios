@@ -113,9 +113,12 @@ final class NetKitUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts[empty].exists)
     }
 
-    private func launch(language: String, locale: String) -> XCUIApplication {
+    private func launch(language: String, locale: String, scenario: String = "empty", id: String = UUID().uuidString, reset: Bool = true) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments += ["-AppleLanguages", "(\(language))", "-AppleLocale", locale]
+        app.launchEnvironment["NETKIT_UI_SSH_ID"] = id
+        app.launchEnvironment["NETKIT_UI_SSH_SCENARIO"] = scenario
+        app.launchEnvironment["NETKIT_UI_SSH_RESET"] = reset ? "1" : "0"
         app.launch()
         return app
     }
@@ -133,5 +136,185 @@ final class NetKitUITests: XCTestCase {
         XCTAssertTrue(app.links[privacy].exists || app.buttons[privacy].exists)
         app.buttons[licenses].tap()
         XCTAssertTrue(app.staticTexts[content].waitForExistence(timeout: 10))
+    }
+}
+
+
+extension NetKitUITests {
+    func testEnglishSshOrderAndExport() { assertSshOrderAndExport(language: "en", locale: "en_US", cancel: "Cancel", up: "Move profile Alpha up", down: "Move profile Alpha down") }
+    func testCzechSshOrderAndExport() { assertSshOrderAndExport(language: "cs", locale: "cs_CZ", cancel: "Zrušit", up: "Posunout profil Alpha nahoru", down: "Posunout profil Alpha dolů") }
+    func testEnglishSshImportPreview() { assertSshImportPreview(language: "en", locale: "en_US", key: "Key", password: "Password", empty: "Empty") }
+    func testCzechSshImportPreview() { assertSshImportPreview(language: "cs", locale: "cs_CZ", key: "Klíč", password: "Heslo", empty: "Prázdné") }
+    func testEnglishSshMissingKeyEditor() { assertSshMissingKeyEditor(language: "en", locale: "en_US", edit: "Edit", title: "Select a key") }
+    func testCzechSshMissingKeyEditor() { assertSshMissingKeyEditor(language: "cs", locale: "cs_CZ", edit: "Upravit", title: "Vyberte klíč") }
+    func testEnglishSshInteractiveProfile() { assertSshInteractiveProfile(language: "en", locale: "en_US", password: "Password", key: "Key", message: "The iOS version does not support keyboard-interactive. Edit the profile to use a password or key.") }
+    func testCzechSshInteractiveProfile() { assertSshInteractiveProfile(language: "cs", locale: "cs_CZ", password: "Heslo", key: "Klíč", message: "iOS verze nepodporuje keyboard-interactive, upravte profil na heslo nebo klíč.") }
+    func testEnglishSshExportValidation() { assertSshExportValidation(language: "en", locale: "en_US", duplicate: "Profiles have duplicate names.", large: "The export exceeds 256 KiB.") }
+    func testCzechSshExportValidation() { assertSshExportValidation(language: "cs", locale: "cs_CZ", duplicate: "Profily mají duplicitní názvy.", large: "Export překračuje limit 256 KiB.") }
+
+    private func sshApp(language: String, locale: String, scenario: String, id: String = UUID().uuidString, reset: Bool = true) -> XCUIApplication {
+        let app = launch(language: language, locale: locale, scenario: scenario, id: id, reset: reset)
+        XCTAssertTrue(app.tabBars.buttons["SSH"].waitForExistence(timeout: 10))
+        app.tabBars.buttons["SSH"].tap()
+        XCTAssertTrue(app.buttons["ssh.export"].waitForExistence(timeout: 10))
+        return app
+    }
+
+    private func reveal(_ element: XCUIElement, in app: XCUIApplication, upwards: Bool = true, file: StaticString = #filePath, line: UInt = #line) {
+        for _ in 0..<8 {
+            if element.exists && element.isHittable { return }
+            if upwards { app.swipeUp() } else { app.swipeDown() }
+        }
+        XCTAssertTrue(element.exists && element.isHittable, "Element not visible: \(element)", file: file, line: line)
+    }
+
+    private func assertSshOrderAndExport(language: String, locale: String, cancel: String, up: String, down: String) {
+        let id = UUID().uuidString
+        var app = sshApp(language: language, locale: locale, scenario: "profiles", id: id)
+        let upAlpha = app.buttons["ssh.move.up.alpha"]
+        let downAlpha = app.buttons["ssh.move.down.alpha"]
+        reveal(downAlpha, in: app)
+        XCTAssertEqual(upAlpha.label, up)
+        XCTAssertEqual(downAlpha.label, down)
+        XCTAssertFalse(upAlpha.isEnabled)
+        XCTAssertTrue(downAlpha.isEnabled)
+        downAlpha.tap()
+        XCTAssertTrue(upAlpha.isEnabled)
+        XCTAssertFalse(downAlpha.isEnabled)
+        app.terminate()
+        app = sshApp(language: language, locale: locale, scenario: "profiles", id: id, reset: false)
+        reveal(app.buttons["ssh.move.up.alpha"], in: app)
+        XCTAssertTrue(app.buttons["ssh.move.up.alpha"].isEnabled)
+        XCTAssertFalse(app.buttons["ssh.move.down.alpha"].isEnabled)
+        reveal(app.buttons["ssh.export"], in: app, upwards: false)
+        app.buttons["ssh.export"].tap()
+        let filename = app.textFields.matching(NSPredicate(format: "value CONTAINS[c] %@", "netkit-ssh-profiles")).firstMatch
+        XCTAssertTrue(filename.waitForExistence(timeout: 10), "Validated export must present the system file exporter")
+        let cancelButton = app.buttons.matching(identifier: cancel).firstMatch
+        XCTAssertTrue(cancelButton.waitForExistence(timeout: 10))
+        cancelButton.tap()
+        XCTAssertTrue(app.buttons["ssh.export"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.staticTexts["ssh.export.error"].exists)
+    }
+
+    private func assertSshImportPreview(language: String, locale: String, key: String, password: String, empty: String) {
+        let app = sshApp(language: language, locale: locale, scenario: "preview")
+        app.buttons["ssh.import"].tap()
+        XCTAssertTrue(app.buttons["ssh.import.apply"].waitForExistence(timeout: 10))
+        let expected = ["HOST": "192.0.2.1 → 192.0.2.2", "PORT": "22 → 2222", "USERNAME": "tester → operator",
+                        "AUTHENTICATION": password + " → " + key, "STARTUP_COMMAND": empty + " → show version", "KEEPALIVE_SECONDS": "30 → 60"]
+        for field in ["HOST", "PORT", "USERNAME", "AUTHENTICATION", "STARTUP_COMMAND", "KEEPALIVE_SECONDS"] {
+            let row = app.descendants(matching: .any).matching(identifier: "ssh.import.change." + field).firstMatch
+            reveal(row, in: app)
+            // LabeledContent exposes its title and value either together or as child text elements.
+            let values = row.staticTexts.allElementsBoundByIndex.map(\.label) + [row.label]
+            XCTAssertTrue(values.contains { $0.contains(expected[field]!) }, "Missing before/after for " + field)
+        }
+        let startup = app.staticTexts.matching(identifier: "ssh.import.startup.warning").firstMatch
+        reveal(startup, in: app)
+        let missing = app.staticTexts.matching(identifier: "ssh.import.key.required").firstMatch
+        reveal(missing, in: app)
+        app.buttons["ssh.import.apply"].tap()
+        let alpha = app.buttons["ssh.connect.alpha"]
+        reveal(alpha, in: app)
+        XCTAssertTrue(alpha.label.contains("192.0.2.2"))
+        XCTAssertFalse(app.buttons["ssh.import.apply"].exists)
+        app.terminate()
+        let v1 = sshApp(language: language, locale: locale, scenario: "preview-v1")
+        v1.buttons["ssh.import"].tap()
+        XCTAssertTrue(v1.buttons["ssh.import.apply"].waitForExistence(timeout: 10))
+        let authentication = v1.descendants(matching: .any).matching(identifier: "ssh.import.authentication.Beta").firstMatch
+        reveal(authentication, in: v1)
+        XCTAssertTrue((authentication.staticTexts.allElementsBoundByIndex.map(\.label) + [authentication.label]).contains { $0.contains(password) })
+        reveal(v1.buttons["ssh.import.key"], in: v1, upwards: false)
+        v1.buttons["ssh.import.key"].tap()
+        v1.buttons["Other key"].tap()
+        reveal(authentication, in: v1)
+        XCTAssertTrue((authentication.staticTexts.allElementsBoundByIndex.map(\.label) + [authentication.label]).contains { $0.contains(key) })
+    }
+
+    private func assertSshMissingKeyEditor(language: String, locale: String, edit: String, title: String) {
+        let app = sshApp(language: language, locale: locale, scenario: "profiles")
+        let connect = app.buttons["ssh.connect.alpha"]
+        reveal(connect, in: app)
+        connect.tap()
+        XCTAssertTrue(app.alerts[title].waitForExistence(timeout: 10))
+        app.alerts.buttons[edit].tap()
+        XCTAssertTrue(app.buttons["ssh.editor.save"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["ssh.editor.save"].isEnabled)
+        XCTAssertTrue(app.staticTexts["ssh.editor.key.required"].exists)
+        let name = app.textFields["ssh.editor.name"]
+        name.tap(); name.typeText(" draft")
+        let create = app.buttons["ssh.editor.create.key"]
+        reveal(create, in: app)
+        create.tap()
+        let keyName = app.textFields["ssh.creator.name"]
+        XCTAssertTrue(keyName.waitForExistence(timeout: 10))
+        keyName.tap(); keyName.typeText("Replacement")
+        app.buttons["ssh.creator.generate"].tap()
+        XCTAssertTrue(app.buttons["ssh.editor.save"].waitForExistence(timeout: 10))
+        reveal(app.buttons["ssh.editor.save"], in: app)
+        XCTAssertTrue(app.buttons["ssh.editor.save"].isEnabled)
+        XCTAssertEqual(app.textFields["ssh.editor.name"].value as? String, "Alpha draft")
+        XCTAssertFalse(app.staticTexts["ssh.editor.key.required"].exists)
+        app.buttons["ssh.editor.save"].tap()
+        XCTAssertTrue(app.buttons["ssh.connect.alpha"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["ssh.connect.alpha"].label.contains("Alpha draft"))
+        app.terminate()
+        let retry = sshApp(language: language, locale: locale, scenario: "reconnect")
+        let reconnect = retry.buttons["ssh.reconnect"]
+        reveal(reconnect, in: retry)
+        reconnect.tap()
+        let reconnectLabel = language == "cs" ? "Znovu připojit" : "Reconnect"
+        let confirm = retry.sheets.buttons[reconnectLabel]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 10))
+        confirm.tap()
+        XCTAssertTrue(retry.alerts[title].waitForExistence(timeout: 10))
+        retry.alerts.buttons["OK"].tap()
+        XCTAssertFalse(retry.alerts[title].exists)
+    }
+
+    private func assertSshInteractiveProfile(language: String, locale: String, password: String, key: String, message: String) {
+        for choice in [password, key] {
+            let app = sshApp(language: language, locale: locale, scenario: "interactive")
+            let warning = app.staticTexts["ssh.interactive.alpha"]
+            reveal(warning, in: app)
+            XCTAssertEqual(warning.label, message)
+            app.buttons["ssh.connect.alpha"].tap()
+            let error = app.staticTexts["ssh.error"]
+            reveal(error, in: app, upwards: false)
+            XCTAssertEqual(error.label, message)
+            app.buttons.matching(identifier: "OK").firstMatch.tap()
+            reveal(app.buttons["ssh.edit.alpha"], in: app)
+            app.buttons["ssh.edit.alpha"].tap()
+            XCTAssertTrue(app.buttons["ssh.editor.save"].waitForExistence(timeout: 10))
+            XCTAssertFalse(app.buttons["ssh.editor.save"].isEnabled)
+            app.buttons["ssh.editor.authentication"].tap()
+            app.buttons[choice].tap()
+            if choice == key {
+                app.buttons["ssh.editor.key"].tap()
+                app.buttons["Other key"].tap()
+            }
+            XCTAssertTrue(app.buttons["ssh.editor.save"].isEnabled)
+            app.buttons["ssh.editor.save"].tap()
+            XCTAssertTrue(app.buttons["ssh.connect.alpha"].waitForExistence(timeout: 10))
+            XCTAssertFalse(app.staticTexts["ssh.interactive.alpha"].exists)
+            app.terminate()
+        }
+    }
+
+    private func assertSshExportValidation(language: String, locale: String, duplicate: String, large: String) {
+        for scenario in ["duplicates", "large"] {
+            let app = sshApp(language: language, locale: locale, scenario: scenario)
+            app.buttons["ssh.export"].tap()
+            let error = app.staticTexts["ssh.export.error"]
+            XCTAssertTrue(error.waitForExistence(timeout: 10))
+            XCTAssertTrue(error.label.contains(scenario == "duplicates" ? duplicate : large))
+            if scenario == "duplicates" { XCTAssertTrue(error.label.contains("Duplicate")) }
+            XCTAssertFalse(app.textFields.matching(NSPredicate(format: "value CONTAINS[c] %@", "netkit-ssh-profiles")).firstMatch.exists)
+            app.buttons.matching(identifier: "OK").firstMatch.tap()
+            XCTAssertFalse(error.exists)
+            app.terminate()
+        }
     }
 }

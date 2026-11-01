@@ -2400,6 +2400,390 @@
           }
         }
       }
+    },
+    "ssh.ok": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OK"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OK"
+          }
+        }
+      }
+    },
+    "ssh.export": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exportovat profily"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export profiles"
+          }
+        }
+      }
+    },
+    "ssh.export.failed": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export se nezdařil"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export failed"
+          }
+        }
+      }
+    },
+    "ssh.export.duplicate.names": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Profily mají duplicitní názvy. Před exportem je přejmenujte:"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Profiles have duplicate names. Rename them before exporting:"
+          }
+        }
+      }
+    },
+    "ssh.export.too.large": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export překračuje limit 256 KiB. Zmenšete počet profilů nebo délku startovacích příkazů."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The export exceeds 256 KiB. Reduce the number of profiles or shorten startup commands."
+          }
+        }
+      }
+    },
+    "ssh.move.up": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Posunout profil %@ nahoru"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move profile %@ up"
+          }
+        }
+      }
+    },
+    "ssh.move.down": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Posunout profil %@ dolů"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move profile %@ down"
+          }
+        }
+      }
+    },
+    "ssh.key.required.title": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vyberte klíč"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select a key"
+          }
+        }
+      }
+    },
+    "ssh.key.required.message": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Profil nemá přiřazený existující klíč. Vyberte klíč nebo vytvořte nový v editoru profilu."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This profile has no existing key assigned. Select a key or create one in the profile editor."
+          }
+        }
+      }
+    },
+    "ssh.key.choose": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vyberte klíč"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select a key"
+          }
+        }
+      }
+    },
+    "ssh.profile.unavailable": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Profil byl smazán nebo už není dostupný."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The profile was deleted or is no longer available."
+          }
+        }
+      }
+    },
+    "ssh.authentication.key": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Klíč"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Key"
+          }
+        }
+      }
+    },
+    "ssh.authentication.interactive": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keyboard-interactive"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keyboard-interactive"
+          }
+        }
+      }
+    },
+    "ssh.authentication.choose": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vyberte heslo nebo klíč"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose password or key"
+          }
+        }
+      }
+    },
+    "ssh.interactive.unsupported": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iOS verze nepodporuje keyboard-interactive, upravte profil na heslo nebo klíč."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The iOS version does not support keyboard-interactive. Edit the profile to use a password or key."
+          }
+        }
+      }
+    },
+    "ssh.import.key": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Klíč pro nové profily"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Key for new profiles"
+          }
+        }
+      }
+    },
+    "ssh.import.no.key": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bez přiřazeného klíče"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No key assigned"
+          }
+        }
+      }
+    },
+    "ssh.import.startup.warning": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zkontrolujte startovací příkaz před připojením. iOS ho zatím neprovádí."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Check the startup command before connecting. iOS does not run it yet."
+          }
+        }
+      }
+    },
+    "ssh.import.password.detached": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Po potvrzení se odpojí uložené heslo. Pokud ho nepoužívá jiný profil, smaže se z Keychainu."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Confirmation detaches the saved password. It is deleted from Keychain if no other profile uses it."
+          }
+        }
+      }
+    },
+    "ssh.startup.command": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Startovací příkaz"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Startup command"
+          }
+        }
+      }
+    },
+    "ssh.keepalive": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keepalive (sekundy)"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keepalive (seconds)"
+          }
+        }
+      }
+    },
+    "ssh.value.empty": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prázdné"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Empty"
+          }
+        }
+      }
+    },
+    "ssh.reconnect": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Znovu připojit"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reconnect"
+          }
+        }
+      }
+    },
+    "ssh.reconnect.confirm": {
+      "localizations": {
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Znovu připojit tento profil?"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reconnect this profile?"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

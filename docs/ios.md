@@ -6,7 +6,8 @@ P1 prošla v [CI 41236666699](https://github.com/Losminek/netkit-ios/actions/run
 P2b prošla v [CI 41286184503](https://github.com/Losminek/netkit-ios/actions/runs/41286184503):
 45 XCTest a 6 UI testů. P3 prošla v [CI 41287557230](https://github.com/Losminek/netkit-ios/actions/runs/41287557230).
 Opravy revize R1 (interní záznam) prošly v [CI 41292675688](https://github.com/Losminek/netkit-ios/actions/runs/41292675688) (XCTest 68, UI 8); 2026-11-01 přeneseno do vývojového repa a od verze 1.0.1 součástí veřejného exportu.
-Aktuální implementaci a omezení popisují §8–12.
+Parita SSH profilů v2 je implementována (§13), nové simulátorové ověření čeká na CI.
+Aktuální implementaci a omezení popisují §8–13.
 Níže původní analýza z 2026-10-27 (D12) a v §7 ověření
 buildu bez Macu. Údaje označené „ověřit“ je nutné potvrdit v oficiální dokumentaci Applu
 v době, kdy se o iOS bude rozhodovat. Údaje v §6 byly ověřeny 2026-10-27; **[P]** = prokázáno
@@ -171,7 +172,11 @@ Tato [pseudoidentita nevyžaduje certifikát](https://developer.apple.com/librar
 Apple účet, vývojový tým ani provisioning profil. Nejde o podpis pro distribuci či zařízení.
 Logy a `.xcresult` se ukládají jako artefakt `ios-simulator-results` i při neúspěchu.
 
-**Vývoj:** iOS se vyvíjí ve stejném vývojovém repu jako Android a od verze 1.0.1 je součástí veřejného exportu. Archivovaný `Losminek/netkit-ios` zůstává jen pro čtení jako historie MVP.
+**Vývoj:** iOS je od verze 1.0.1 součástí veřejného exportu. Pro samostatné iOS kolo se
+`Losminek/netkit-ios` dočasně odarchivuje, synchronizuje se sdílené jádro a pracuje se na větvi
+`codex/*`. Po nezávislé revizi a zeleném `ios.yml` se změny vracejí přes PR do vývojového repa;
+po uzavření kola se veřejné iOS repo znovu archivuje. Push a CI zajišťuje pověřený reviewer.
+Android se z tohoto repa nevydává ani netaguje.
 
 Na macOS lze pro simulátor spustit:
 
@@ -395,3 +400,48 @@ testy prošly v dočasné JVM konfiguraci (22 testů); nejde o Swift ani Kotlin/
 CI před kontrolou verze explicitně vybírá instalovaný Xcode 16.4 a Linux job navíc kontroluje
 zakázané importy v `commonMain` stejně jako hlavní CI. R1 nemění `commonMain`, `commonTest`,
 Android ani Gradle konfiguraci. Nezávislá kontrola diffu a zelené R1 CI zůstávají branou před předáním.
+
+
+## 13. SSH profily v2 — implementace, čeká simulátorové CI
+
+SwiftUI používá stávající sdílené jádro přes `IosSshDomain`; `commonMain` ani Android se nemění.
+Export vytváří pouze v2 (`netkit-ssh-profiles.json`), se stejným pořadím jako v seznamu a bez
+lokálních ID, referencí, přihlašovacích údajů, klíčů a důvěry serverů. Před otevřením Files se
+připraví a ověří neměnný snapshot. Duplicitní jména se vypíšou, překročení 256 KiB má vlastní
+hlášku; při těchto chybách se exportní dialog neotevře. Chyby lze zavřít tlačítkem OK.
+
+Import přijímá v1, v2 a starý export telefonu podle [SSH §9](funkce/ssh.md#9-výměnný-formát-v2-starý-export-a-pořadí-profilů).
+Náhled ukazuje změněná pole před → po: host, port, uživatel, ověření, startovací příkaz a keepalive.
+Upozorňuje na změnu příkazu, odpojení hesla a chybějící klíč. Volba lokálního klíče přepočítá
+náhled nových profilů; v1 se podle ní přepne mezi heslem a klíčem, v2/legacy zachová explicitní
+typ ověření. Změna typu z PASSWORD odpojí heslo stejně jako změna cíle; nepoužívaný záznam
+se smaže z Keychainu až po úspěšném uložení potvrzeného importu. Import nepřenáší klíče ani důvěru.
+
+Pořadí se mění šipkami nahoru/dolů, ukládá se do metadat a přežije restart. Krajní šipky a šipky
+během operace či otevřeného náhledu jsou zakázané. VoiceOver popisky CS/EN obsahují jméno profilu.
+Profil KEY bez existujícího přiřazeného klíče před connect i reconnect zobrazí výzvu k editoru,
+aniž vznikne transport. Editor zachová KEY a vyžádá klíč; vytvoření nového Ed25519 klíče je
+přístupné i s jinými klíči v seznamu. Návrat zachová netajná rozepsaná pole, heslo se vymaže.
+Smazaný profil nelze z výzvy znovu vytvořit. Reconnect používá přesný profil potvrzený v dialogu.
+
+Keyboard-interactive iOS MVP nepodporuje. Importovaný INTERACTIVE profil má v seznamu i při
+pokusu o spojení CS/EN vysvětlení a doporučení upravit ověření na heslo nebo klíč. Editor žádá
+výslovnou podporovanou volbu a tu předá při uložení; nepřevádí profil automaticky na heslo.
+RSA, cizí privátní klíče, automatické startup příkazy a keepalive zůstávají mimo podporu MVP.
+
+**Ověření:** předchozí simulátorový výsledek 68 XCTest / 8 UI je uveden v úvodu. Nová sada má
+ve zdrojích 83 XCTest (12 přibylo v bridge/ViewModel fázi a 3 v UI fázi) a 18 UI testů
+(10 nových CS/EN testů: export/pořadí/restart, náhled v1/v2, chybějící klíč/reconnect/vytvoření,
+INTERACTIVE → heslo/klíč a exportní chyby). Tyto počty nejsou výsledek spuštění: Swift build,
+Kotlin/Native a simulátorové testy této změny čekají na `ios.yml` v macOS. Lokální JVM kontrola
+15 přenositelných SSH bridge testů prošla; neověřuje Swift ani Apple API.
+
+UI testy mají opt-in fixture harness jen v Debug simulátoru, izolovaný podle UUID od běžných
+metadat a Keychain služby. Obsahuje pouze syntetická data a blokuje síťový transport.
+Test náhledu obchází pouze systémový výběr fixture souboru; dále používá běžné dekódování,
+plánování a potvrzení importu. Exportní test otevírá skutečný systémový fileExporter.
+
+**Na iPhonu zbývá:** Files a přenos v1/v2/legacy mezi platformami, VoiceOver/velikost písma,
+uložené pořadí po ukončení procesu, výzva → editor → vytvoření klíče, ovládání s klávesnicí,
+zamknutý Keychain a reconnect při změně sítě nebo VPN. Platí také checklist §8/§10;
+simulátor nenahrazuje fyzické přijetí. Distribuce, Apple účet a podpis pro zařízení nejsou součástí.

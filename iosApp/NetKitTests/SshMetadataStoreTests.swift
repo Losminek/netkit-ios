@@ -420,6 +420,7 @@ final class SshProfileExchangeTests: XCTestCase {
                 XCTAssertNil(model.terminalSnapshot)
                 XCTAssertTrue(model.needsKeySelection(candidate))
                 XCTAssertEqual(model.profileForKeySelection()?.id, candidate.id)
+                XCTAssertEqual(model.profileForKeySelection(candidate)?.id, candidate.id) // Alert state may already be dismissed.
                 XCTAssertFalse(model.saveProfile(id: candidate.id, name: candidate.name, host: candidate.host, port: "22", username: "tester", keyRef: nil, password: ""))
                 XCTAssertEqual(model.data?.profiles.first(where: { $0.id == candidate.id })?.authentication, .key)
             }
@@ -445,6 +446,7 @@ final class SshProfileExchangeTests: XCTestCase {
             XCTAssertNil(model.keySelectionRequired)
             model.keySelectionRequired = missing // A delayed alert still holds the old request.
             XCTAssertNil(model.profileForKeySelection())
+            XCTAssertNil(model.profileForKeySelection(missing)) // The captured alert value is checked against live storage too.
             XCTAssertTrue(model.profileUnavailable)
             XCTAssertNil(model.keySelectionRequired)
             XCTAssertFalse(model.saveProfile(id: missing.id, name: missing.name, host: missing.host, port: "22", username: "tester", keyRef: nil, password: ""))
@@ -503,4 +505,78 @@ private final class ProfileTestSession: NSObject, SshSession {
     func send(text: String) -> Bool { true }
     func resize(columns: Int32, rows: Int32) {}
     func close() {}
+}
+
+final class SshProfileEditorTests: XCTestCase {
+    func testInteractiveDraftRequiresExplicitSupportedChoiceAndKeyDraftDoesNotFallBack() throws {
+        let domain = IosSshDomain()
+        let interactive = try XCTUnwrap(domain.profile(id: "interactive", name: "Target", host: "192.0.2.1", port: 22,
+            username: "tester", authentication: .interactive, secretRef: nil, keyRef: nil, startupCommand: "", keepaliveSeconds: 30))
+        var draft = SshProfileDraft(profile: interactive)
+        XCTAssertNil(draft.authentication)
+        draft.authenticationChoice = "PASSWORD"
+        XCTAssertEqual(draft.authentication, .password)
+        draft.authenticationChoice = "KEY"
+        XCTAssertEqual(draft.authentication, .key)
+        XCTAssertTrue(draft.needsKeySelection(keys: [SshKeyInfo(id: "other-key", name: "Other", publicKey: "public")]))
+        draft.keyRef = "other-key"
+        XCTAssertFalse(draft.needsKeySelection(keys: [SshKeyInfo(id: "other-key", name: "Other", publicKey: "public")]))
+        let keyProfile = try XCTUnwrap(domain.profile(id: "key-profile", name: "Key target", host: "192.0.2.1", port: 22,
+            username: "tester", authentication: .key, secretRef: nil, keyRef: "deleted-key", startupCommand: "", keepaliveSeconds: 30))
+        let missing = SshProfileDraft(profile: keyProfile)
+        XCTAssertEqual(missing.authentication, .key)
+        XCTAssertTrue(missing.needsKeySelection(keys: []))
+    }
+
+    @MainActor
+    func testInteractiveImportShowsSpecificErrorWithoutTransportAndCanBeSavedAsPasswordOrKey() throws {
+        let choices: [SshAuthentication] = [.password, .key]
+        for choice in choices {
+            let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+            let chain = KeychainSecrets(service: "cz.netkit.ios.tests." + UUID().uuidString)
+            defer { try? FileManager.default.removeItem(at: root); try? chain.deleteServiceItems() }
+            let store = try SshMetadataStore(directory: root)
+            let document = Data("""
+                {"format":"netkit-ssh-profiles","schema":2,"profiles":[{"alias":"Target","host":"192.0.2.1","port":22,"username":"tester","authentication":"INTERACTIVE","startupCommand":"","keepaliveSeconds":30}],"skipped":[]}
+                """.utf8)
+            try store.applyImport(store.previewImport(document))
+            var attempts = 0
+            let model = SshViewModel(keychain: chain, directory: root, sessionFactory: { _, _, _, _, _ in
+                attempts += 1; throw SshTransportFailure.unavailable
+            })
+            let imported = try XCTUnwrap(model.data?.profiles.first)
+            model.connect(imported)
+            XCTAssertEqual(attempts, 0)
+            XCTAssertEqual(model.error, .interactiveUnsupported)
+            XCTAssertNil(model.terminalSnapshot)
+            XCTAssertNil(model.keySelectionRequired)
+            model.generateKey(name: "Replacement")
+            let key = try XCTUnwrap(model.data?.keys.first)
+            XCTAssertTrue(model.saveProfile(id: imported.id, name: imported.name, host: imported.host, port: "22", username: imported.username,
+                keyRef: choice == .key ? key.id : nil, password: "", authentication: choice))
+            XCTAssertNil(model.error)
+            XCTAssertEqual(model.data?.profiles.first?.authentication, choice)
+            XCTAssertEqual(try SshMetadataStore(directory: root).snapshot().profiles.first?.authentication, choice)
+        }
+    }
+
+    @MainActor
+    func testExportDocumentRetainsValidatedSnapshotAndDuplicateNamesAreExplained() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let chain = KeychainSecrets(service: "cz.netkit.ios.tests." + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root); try? chain.deleteServiceItems() }
+        let model = SshViewModel(keychain: chain, directory: root)
+        XCTAssertTrue(model.saveProfile(id: nil, name: "Alpha", host: "192.0.2.1", port: "22", username: "tester", keyRef: nil, password: ""))
+        let snapshot = try XCTUnwrap(model.prepareExport())
+        let document = SshProfileDocument(contents: snapshot)
+        XCTAssertTrue(model.saveProfile(id: nil, name: "Beta", host: "192.0.2.2", port: "22", username: "tester", keyRef: nil, password: ""))
+        model.cancelExport()
+        XCTAssertEqual(document.contents, snapshot)
+        let rootObject = try XCTUnwrap(JSONSerialization.jsonObject(with: document.contents) as? [String: Any])
+        XCTAssertEqual(rootObject["schema"] as? Int, 2)
+        XCTAssertEqual((rootObject["profiles"] as? [[String: Any]])?.count, 1)
+        let description = sshExportFailureMessage(.duplicateNames(["Alpha", "Beta"]))
+        XCTAssertTrue(description.contains("Alpha"))
+        XCTAssertTrue(description.contains("Beta"))
+    }
 }

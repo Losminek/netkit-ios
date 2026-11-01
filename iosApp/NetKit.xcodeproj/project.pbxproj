@@ -512,6 +512,7 @@
 				MARKETING_VERSION = 0.1.0;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.0;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) DEBUG";
 		};
 		name = Debug;
 		};

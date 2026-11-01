@@ -22,7 +22,7 @@ final class SshViewModel: ObservableObject {
         let reply: (Bool) -> Void
     }
     struct ChangedHost { let endpoint: String; let saved: String; let offered: String }
-    enum ErrorKind { case storage, invalid, credentials, keyInUse, connection, algorithm, unsupportedCredential, hostChanged, hostRejected, timeout, inputOverflow }
+    enum ErrorKind: Equatable { case storage, invalid, credentials, keyInUse, connection, algorithm, unsupportedCredential, interactiveUnsupported, hostChanged, hostRejected, timeout, inputOverflow }
     @Published var data: SshData?
     @Published var error: ErrorKind?
     @Published var hostPrompt: HostPrompt?
@@ -50,6 +50,9 @@ final class SshViewModel: ObservableObject {
     private var activeProfile: SshProfile?
     private let lifecycle: IosSshLifecycle
     private var backgroundTask: Task<Void, Never>?
+    #if DEBUG && targetEnvironment(simulator)
+    var uiImportURL: URL?
+    #endif
 
     init(nowMillis: @escaping () -> Int64 = { Int64(clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW) / 1_000_000) },
          keychain: KeychainSecrets = KeychainSecrets(), directory: URL? = nil,
@@ -151,6 +154,7 @@ final class SshViewModel: ObservableObject {
             keySelectionRequired = profile; error = nil; return
         }
         keySelectionRequired = nil
+        guard profile.authentication != .interactive else { error = .interactiveUnsupported; return }
         guard profile.authentication == .password || profile.authentication == .key else {
             error = .credentials; return
         }
@@ -216,8 +220,8 @@ final class SshViewModel: ObservableObject {
     }
 
     /// Resolve the live row again: a pending alert must never resurrect a deleted profile.
-    func profileForKeySelection() -> SshProfile? {
-        guard let requested = keySelectionRequired else { return nil }
+    func profileForKeySelection(_ presented: SshProfile? = nil) -> SshProfile? {
+        guard let requested = presented ?? keySelectionRequired else { return nil }
         keySelectionRequired = nil
         guard let profile = store?.snapshot().profiles.first(where: { $0.id == requested.id }) else {
             profileUnavailable = true; return nil
