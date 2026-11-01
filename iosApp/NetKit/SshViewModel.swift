@@ -278,14 +278,14 @@ final class SshViewModel: ObservableObject {
         disconnect()
         do { try store.deleteProfile(id: profile.id); data = store.snapshot(); error = nil
             if let ref = profile.secretRef { cleanupUnreferenced([ref]) }
-        } catch { error = .storage }
+        } catch { self.error = .storage }
     }
 
     func deleteKey(_ key: SshKeyInfo) {
         guard let store else { error = .storage; return }
         guard data?.profiles.contains(where: { $0.keyRef == key.id }) == false else { error = .keyInUse; return }
         do { try store.deleteKey(id: key.id); data = store.snapshot(); error = nil; cleanupUnreferenced([key.id]) }
-        catch { error = .storage }
+        catch { self.error = .storage }
     }
 
     func previewImport(_ url: URL) {
