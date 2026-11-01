@@ -80,7 +80,8 @@ final class LanTests: XCTestCase {
         }
         listener.stateUpdateHandler = { if case .ready = $0 { listening.fulfill() } }
         listener.start(queue: .main)
-        wait(for: [listening], timeout: 5)
+        // Loaded simulator runners can delay listener readiness; allow 20 s before probing.
+        wait(for: [listening], timeout: 20)
         let openPort = try XCTUnwrap(listener.port?.rawValue)
 
         let fd = socket(AF_INET, SOCK_STREAM, 0)

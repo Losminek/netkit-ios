@@ -1,4 +1,5 @@
 import XCTest
+import Foundation
 
 final class NetKitUITests: XCTestCase {
     func testEnglishLaunch() throws {
@@ -113,9 +114,10 @@ final class NetKitUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts[empty].exists)
     }
 
-    private func launch(language: String, locale: String, scenario: String = "empty", id: String = UUID().uuidString, reset: Bool = true) -> XCUIApplication {
+    private func launch(language: String, locale: String, scenario: String = "empty", id: String = UUID().uuidString, reset: Bool = true, captureSshExport: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments += ["-AppleLanguages", "(\(language))", "-AppleLocale", locale]
+        if captureSshExport { app.launchArguments.append("-netkit-ui-capture-ssh-export") }
         app.launchEnvironment["NETKIT_UI_SSH_ID"] = id
         app.launchEnvironment["NETKIT_UI_SSH_SCENARIO"] = scenario
         app.launchEnvironment["NETKIT_UI_SSH_RESET"] = reset ? "1" : "0"
@@ -141,8 +143,8 @@ final class NetKitUITests: XCTestCase {
 
 
 extension NetKitUITests {
-    func testEnglishSshOrderAndExport() { assertSshOrderAndExport(language: "en", locale: "en_US", up: "Move profile Alpha up", down: "Move profile Alpha down") }
-    func testCzechSshOrderAndExport() { assertSshOrderAndExport(language: "cs", locale: "cs_CZ", up: "Posunout profil Alpha nahoru", down: "Posunout profil Alpha dolů") }
+    func testEnglishSshOrderAndExport() throws { try assertSshOrderAndExport(language: "en", locale: "en_US", up: "Move profile Alpha up", down: "Move profile Alpha down") }
+    func testCzechSshOrderAndExport() throws { try assertSshOrderAndExport(language: "cs", locale: "cs_CZ", up: "Posunout profil Alpha nahoru", down: "Posunout profil Alpha dolů") }
     func testEnglishSshImportPreview() { assertSshImportPreview(language: "en", locale: "en_US", key: "Key", password: "Password", empty: "Empty") }
     func testCzechSshImportPreview() { assertSshImportPreview(language: "cs", locale: "cs_CZ", key: "Klíč", password: "Heslo", empty: "Prázdné") }
     func testEnglishSshMissingKeyEditor() { assertSshMissingKeyEditor(language: "en", locale: "en_US", edit: "Edit", title: "Select a key") }
@@ -152,8 +154,8 @@ extension NetKitUITests {
     func testEnglishSshExportValidation() { assertSshExportValidation(language: "en", locale: "en_US", duplicate: "Profiles have duplicate names.", large: "The export exceeds 256 KiB.") }
     func testCzechSshExportValidation() { assertSshExportValidation(language: "cs", locale: "cs_CZ", duplicate: "Profily mají duplicitní názvy.", large: "Export překračuje limit 256 KiB.") }
 
-    private func sshApp(language: String, locale: String, scenario: String, id: String = UUID().uuidString, reset: Bool = true) -> XCUIApplication {
-        let app = launch(language: language, locale: locale, scenario: scenario, id: id, reset: reset)
+    private func sshApp(language: String, locale: String, scenario: String, id: String = UUID().uuidString, reset: Bool = true, captureSshExport: Bool = false) -> XCUIApplication {
+        let app = launch(language: language, locale: locale, scenario: scenario, id: id, reset: reset, captureSshExport: captureSshExport)
         XCTAssertTrue(app.tabBars.buttons["SSH"].waitForExistence(timeout: 10))
         app.tabBars.buttons["SSH"].tap()
         XCTAssertTrue(app.buttons["ssh.export"].waitForExistence(timeout: 10))
@@ -169,7 +171,7 @@ extension NetKitUITests {
         XCTAssertTrue(element.exists && element.isHittable, "Element not visible: \(element)", file: file, line: line)
     }
 
-    private func assertSshOrderAndExport(language: String, locale: String, up: String, down: String) {
+    private func assertSshOrderAndExport(language: String, locale: String, up: String, down: String) throws {
         let id = UUID().uuidString
         var app = sshApp(language: language, locale: locale, scenario: "profiles", id: id)
         let upAlpha = app.buttons["ssh.move.up.alpha"]
@@ -183,26 +185,33 @@ extension NetKitUITests {
         XCTAssertTrue(upAlpha.isEnabled)
         XCTAssertFalse(downAlpha.isEnabled)
         app.terminate()
-        app = sshApp(language: language, locale: locale, scenario: "profiles", id: id, reset: false)
+        app = sshApp(language: language, locale: locale, scenario: "profiles", id: id, reset: false, captureSshExport: true)
         reveal(app.buttons["ssh.move.up.alpha"], in: app)
         XCTAssertTrue(app.buttons["ssh.move.up.alpha"].isEnabled)
         XCTAssertFalse(app.buttons["ssh.move.down.alpha"].isEnabled)
         reveal(app.buttons["ssh.export"], in: app, upwards: false)
         app.buttons["ssh.export"].tap()
-        let filename = app.textFields.matching(NSPredicate(format: "value CONTAINS[c] %@", "netkit-ssh-profiles")).firstMatch
-        XCTAssertTrue(filename.waitForExistence(timeout: 10), "Validated export must present the system file exporter")
-        XCTAssertEqual(filename.value as? String, "netkit-ssh-profiles")
-        // The pinned iOS 18.5 Files panel offers Move, without a Cancel button.
-        // Dismiss the actual sheet by its navigation chrome; never tap the obscured app behind it.
-        let filesBar = app.navigationBars["FullDocumentManagerViewControllerNavigationBar"]
-        XCTAssertTrue(filesBar.waitForExistence(timeout: 10))
-        XCTAssertTrue(filesBar.isHittable)
-        filesBar.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1)).press(forDuration: 0.05,
-            thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.9)))
-        let dismissed = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            !filesBar.exists && !filename.exists && app.buttons["ssh.export"].isHittable
-        }, object: app)
-        XCTAssertEqual(XCTWaiter.wait(for: [dismissed], timeout: 10), .completed)
+        let captured = app.staticTexts["ssh.ui.export.capture"]
+        XCTAssertTrue(captured.waitForExistence(timeout: 10), "Export must capture the actual prepared JSON")
+        let json = try XCTUnwrap(captured.value as? String)
+        let bytes = try XCTUnwrap(json.data(using: .utf8))
+        XCTAssertLessThanOrEqual(bytes.count, 256 * 1024)
+        let document = try XCTUnwrap(JSONSerialization.jsonObject(with: bytes) as? [String: Any])
+        XCTAssertEqual(document["format"] as? String, "netkit-ssh-profiles")
+        XCTAssertEqual(document["schema"] as? Int, 2)
+        XCTAssertEqual(Set(document.keys), Set(["format", "schema", "source", "profiles", "skipped"]))
+        XCTAssertEqual((document["skipped"] as? [Any])?.count, 0)
+        let profiles = try XCTUnwrap(document["profiles"] as? [[String: Any]])
+        XCTAssertEqual(profiles.count, 2)
+        XCTAssertEqual(profiles.compactMap { $0["alias"] as? String }, ["Beta", "Alpha"], "Export must retain the moved order after restart")
+        let portableFields = Set(["alias", "host", "port", "username", "authentication", "startupCommand", "keepaliveSeconds"])
+        for profile in profiles {
+            XCTAssertEqual(Set(profile.keys), portableFields, "Only portable profile fields may leave the app")
+            for field in ["id", "secretRef", "keyRef", "keys", "hostKeys", "rejectedHostKeys"] { XCTAssertNil(profile[field], field) }
+            XCTAssertEqual(profile["host"] as? String, "192.0.2.1")
+            XCTAssertEqual(profile["authentication"] as? String, "KEY")
+        }
+        XCTAssertTrue(app.buttons["ssh.export"].isHittable)
         XCTAssertFalse(app.staticTexts["ssh.export.error"].exists)
     }
 

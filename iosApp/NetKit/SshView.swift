@@ -75,6 +75,9 @@ struct SshView: View {
     @State private var showImporter = false
     @State private var showExporter = false
     @State private var exportDocument: SshProfileDocument?
+    #if DEBUG && targetEnvironment(simulator)
+    @State private var capturedUIExport: String?
+    #endif
     @State private var reconnecting: SshProfile?
     @State private var showImportConfirm = false
     @State private var control = false
@@ -123,10 +126,27 @@ struct SshView: View {
                 Button("ssh.add") { editing = ProfileEdit(profile: nil) }.accessibilityIdentifier("ssh.add")
                 Button("ssh.import") { requestImport() }.accessibilityIdentifier("ssh.import")
                 Button("ssh.export") {
+                    #if DEBUG && targetEnvironment(simulator)
+                    capturedUIExport = nil
+                    #endif
                     if let prepared = model.prepareExport() {
+                        #if DEBUG && targetEnvironment(simulator)
+                        // Opt-in UI tests inspect the actual validated bytes without involving Files.
+                        if ProcessInfo.processInfo.arguments.contains("-netkit-ui-capture-ssh-export") {
+                            guard let json = String(data: prepared, encoding: .utf8) else { model.error = .invalid; return }
+                            capturedUIExport = json; model.cancelExport(); return
+                        }
+                        #endif
                         exportDocument = SshProfileDocument(contents: prepared); showExporter = true
                     }
                 }.accessibilityIdentifier("ssh.export")
+                #if DEBUG && targetEnvironment(simulator)
+                if let capturedUIExport {
+                    Text(verbatim: "Captured SSH export")
+                        .accessibilityValue(Text(verbatim: capturedUIExport))
+                        .accessibilityIdentifier("ssh.ui.export.capture")
+                }
+                #endif
                 if let profiles = model.data?.profiles {
                     ForEach(profiles, id: \.id) { profile in profileRow(profile) }
                     if profiles.isEmpty { Text("ssh.empty") }
