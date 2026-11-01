@@ -1,4 +1,4 @@
-name: iOS P2
+name: iOS R1
 
 on:
   push:
@@ -31,6 +31,12 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
+      - name: Forbidden imports in shared commonMain
+        run: |
+          if grep -rE "^import (java|javax|android)\." shared/src/commonMain; then
+            echo "::error::shared/src/commonMain must not import java, javax or android"
+            exit 1
+          fi
       - name: Strict tests, lint and debug build without Apple targets
         run: >-
           ./gradlew --no-daemon --dependency-verification strict
@@ -51,6 +57,7 @@ jobs:
       - name: Verify Apple toolchain and select available iPhone deterministically
         run: |
           test "$(uname -m)" = arm64
+          sudo xcode-select -s /Applications/Xcode_16.4.app
           test "$(xcodebuild -version)" = $'Xcode 16.4\nBuild version 16F6'
           xcodebuild -version
           mkdir -p artifacts/ios

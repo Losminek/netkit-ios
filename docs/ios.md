@@ -4,8 +4,9 @@
 XCTest bridge a CS/EN UI testy prošly v [CI 41219799892](https://github.com/Losminek/netkit-ios/actions/runs/41219799892).
 P1 prošla v [CI 41236666699](https://github.com/Losminek/netkit-ios/actions/runs/41236666699).
 P2b prošla v [CI 41286184503](https://github.com/Losminek/netkit-ios/actions/runs/41286184503):
-45 XCTest a 6 UI testů. P3 je rozpracována a čeká na vlastní macOS CI.
-Aktuální implementaci a omezení popisují §8–11.
+45 XCTest a 6 UI testů. P3 prošla v [CI 41287557230](https://github.com/Losminek/netkit-ios/actions/runs/41287557230).
+Opravy revize R1 jsou rozpracované a čekají na vlastní macOS CI.
+Aktuální implementaci a omezení popisují §8–12.
 Níže původní analýza z 2026-10-27 (D12) a v §7 ověření
 buildu bez Macu. Údaje označené „ověřit“ je nutné potvrdit v oficiální dokumentaci Applu
 v době, kdy se o iOS bude rozhodovat. Údaje v §6 byly ověřeny 2026-10-27; **[P]** = prokázáno
@@ -195,7 +196,9 @@ Později na fyzickém zařízení, nikoli v této fázi:
 
 - Local Network dialog: povolení umožní cílenou LAN operaci, odmítnutí zobrazí srozumitelný stav.
 - Wi-Fi info: bez entitlementu/polohy prázdný stav; s oprávněním údaje pouze o aktuální síti.
-- WoL: unicast na povolený cíl; broadcast až s oprávněným multicast entitlementem.
+- WoL: unicast na povolený cíl včetně opakování po vypršení ARP cache uspaného cíle.
+  Úspěch UDP send znamená předání systému, nikoli důkaz odeslání rámce či probuzení.
+  Broadcast až s oprávněným multicast entitlementem.
 - ICMP: datagramový ping v povolené síti, timeout a zrušení bez raw socketů.
 - Entitlementy: ověřit dostupnost před zařízením/distribucí, nepožadovat je kvůli CI simulátoru.
 
@@ -293,8 +296,8 @@ lokální Linux navíc ověřuje přenosné Kotlin bridge testy, ale nenahrazuje
 Omezení P2: RSA host/user klíče, import cizích privátních klíčů, keyboard-interactive,
 SFTP/tunely, automatické startup příkazy a keepalive nejsou implementovány. Metadata startupCommand
 /keepaliveSeconds se zachovají, ale transport je neprovádí. Generované privátní klíče se neexportují.
-Po nahrazení přihlašovacího údaje může v Keychainu zůstat neodkazovaná stará položka; bezpečné
-odstraňování se sdílenými referencemi není v P2. Tato omezení nezavádějí slabší autentizaci.
+Původní P2 ponechávala po nahrazení přihlašovacího údaje neodkazované položky v Keychainu;
+opravu úklidu a mazání profilů/klíčů řeší R1 (§12). Tato omezení nezavádějí slabší autentizaci.
 
 XCTest používají skutečný NIOSSH server pouze na 127.0.0.1, runtime generované host/user klíče
 a heslo, bez spouštění příkazů hostitele. Prověřují password/key auth, TOFU před autentizací,
@@ -321,14 +324,15 @@ VPN a Wi-Fi/mobilní přechod, IME/hardwarovou klávesnici a skutečné chován�
 Simulátor tato ověření nenahrazuje.
 
 
-## 11. Dokončení — P3 (rozpracováno 2026-11-01, čeká CI)
+## 11. Dokončení — P3 (ověřeno 2026-11-01)
 
 P3 upravuje navigaci na právě čtyři záložky ve stejném pořadí jako Android:
 Přehled / Zařízení / SSH / WoL (EN Overview / Devices / SSH / WoL). Přehled zobrazuje
 aktuální Wi-Fi přímo a odkazy na podobrazovky Speedtest a O aplikaci; Zařízení obsahuje mDNS, ping,
 TCP porty a DNS. Systémová položka More se nepoužívá. Spektrum není součástí iOS.
 CS i EN UI testy mají ověřit čtyři položky, přístup k O aplikaci a prázdné stavy (AC-009).
-Tato změna dosud nemá výsledek macOS CI; zelené P2b ji nepotvrzuje.
+P3 potvrdil zelený běh [CI 41287557230](https://github.com/Losminek/netkit-ios/actions/runs/41287557230);
+nejde o ověření na fyzickém zařízení.
 
 O aplikaci poskytuje verzi, lokalizovaný odkaz na zásady a offline licence komponent.
 `IosAboutDomain.privacyUrl(language:)` přijímá jazykový kód: `cs` (bez ohledu na velikost
@@ -347,3 +351,44 @@ verzí; přehled verzí, zdrojů a licencí zůstává v [zavislosti.md](zavislo
 
 Fyzický iPhone, entitlementy, distribuce a export compliance zůstávají mimo toto ověření;
 checklist zařízení v §8 a §10 platí dál. Nezávislá revize před merge je nadále nutná.
+
+
+## 12. Opravy nezávislé revize — R1 (implementace, čeká CI)
+
+R1 opravuje nálezy nad P0–P2 a přidává schválené cílené kontroly. Předchozí zelený P3 běh
+nepotvrzuje tyto nové změny. Výsledek Swift sestavení, Kotlin/Native a simulátorových testů R1
+se doplní po CI; na Linuxu nelze Apple transporty ani Keychain ověřit. Přenosné Kotlin bridge
+testy prošly v dočasné JVM konfiguraci (22 testů); nejde o Swift ani Kotlin/Native běh.
+
+- SSH: monotónní hodiny zahrnující spánek a životní cyklus na úrovni aplikace, překryv terminálu
+  při neaktivní scéně, úklid odpojených hesel až po úspěšném zápisu metadat a mazání profilů/klíčů.
+  Klíč odkazovaný jakýmkoli profilem nelze smazat. Chybějící metadata při čisté instalaci vedou
+  k vyčištění příslušné Keychain služby; chybu čtení nelze zaměnit za čistou instalaci.
+  Při startu s validními metadaty se přes `accountIDs` znovu porovnají reference a odstraní
+  osiřelé položky, takže neúspěšný dřívější úklid lze zopakovat. Při poškozených nebo nečitelných
+  metadatech se Keychain tímto postupem nemaže. Skutečné snímky přepínače aplikací s překryvem
+  terminálu zatím nebyly ověřeny (NOT RUN).
+- Změněný host key zůstává bezpečnostním varováním i při chybě zápisu odmítnutého otisku.
+  UI doplňuje uložený/nabízený otisk a kontext dříve odmítnutého klíče. Import ukazuje
+  `user@[host]:port → user@[host]:port` ze sdíleného endpointu; změna cíle odpojí heslo,
+  ale záměrně zachová `keyRef`. Náhled a TOFU zůstávají povinné.
+- LAN: kontrola vlastní sítě dostává aktuální Wi-Fi CIDR a konkrétní důvody potvrzení;
+  odepřené Local Network oprávnění má vlastní chybu. Vstupy se ořezávají a validují před startem,
+  zrušení čistí průběžný stav. Cílené testy doplňují souběžnost a rušení. Klasifikace PolicyDenied
+  má test čisté rozhodovací funkce; skutečný `currentPath.unsatisfiedReason` při odepření
+  oprávnění vyžaduje zařízení, nikoli jen tuto statickou kontrolu.
+- LibreSpeed upload zmenšuje tělo pouze při HTTP 413, nejníže na 256 KiB; ostatní chyby
+  měření ukončí jako neúspěšné. Pozdní 413 souběžného staršího pokusu s větším tělem vede
+  k opakování s aktuální velikostí, i když ji mezitím jiný proud úspěšně přijal. Test NDT7
+  řídí pořadí asynchronním signálem a zachovává potřebnou dobu přenosu.
+- R1-11: RTT a rychlosti používají `formatted(.number.precision(.fractionLength(...)))`,
+  což je doloženo statickou kontrolou volání API; skutečné CS/EN vykreslení R1 čeká na CI.
+- WoL připíná generaci rozhraní a IPv4/masky místo každé aktualizace cesty. Wi-Fi vybírá
+  podle typu v `availableInterfaces`, bez podmínky `path.status == .satisfied`, aby ji
+  nevyřadilo samotné chybějící internetové připojení. Broadcast se bez entitlementu v editoru nenabízí.
+  Unicast může po vypršení ARP cache uspaného cíle selhat i při úspěšném UDP send;
+  bez zařízení nelze účinnost probuzení doložit. Toto omezení nenahrazuje varování v UI.
+
+CI před kontrolou verze explicitně vybírá instalovaný Xcode 16.4 a Linux job navíc kontroluje
+zakázané importy v `commonMain` stejně jako hlavní CI. R1 nemění `commonMain`, `commonTest`,
+Android ani Gradle konfiguraci. Nezávislá kontrola diffu a zelené R1 CI zůstávají branou před předáním.
