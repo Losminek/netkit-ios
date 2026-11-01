@@ -411,7 +411,8 @@ Android ani Gradle konfiguraci. Nezávislá kontrola diffu a zelené R1 CI zůst
 Výsledek: kontrola „ARM iOS simulator“ ve veřejném PR vydání 1.0.1 PASS (2026-11-01).
 Fyzický iPhone dál NOT RUN.
 
-SwiftUI používá stávající sdílené jádro přes `IosSshDomain`; `commonMain` ani Android se nemění.
+SwiftUI používá sdílené jádro přes `IosSshDomain`. Platforma předává zdroj exportu povinným
+parametrem: iOS zapisuje `netkit-ios`, Android dál `netkit-android`; formát v2 se nemění.
 Export vytváří pouze v2 (`netkit-ssh-profiles.json`), se stejným pořadím jako v seznamu a bez
 lokálních ID, referencí, přihlašovacích údajů, klíčů a důvěry serverů. Před otevřením Files se
 připraví a ověří neměnný snapshot. Duplicitní jména se vypíšou, překročení 256 KiB má vlastní
@@ -423,6 +424,14 @@ Upozorňuje na změnu příkazu, odpojení hesla a chybějící klíč. Volba lo
 náhled nových profilů; v1 se podle ní přepne mezi heslem a klíčem, v2/legacy zachová explicitní
 typ ověření. Změna typu z PASSWORD odpojí heslo stejně jako změna cíle; nepoužívaný záznam
 se smaže z Keychainu až po úspěšném uložení potvrzeného importu. Import nepřenáší klíče ani důvěru.
+
+Při selhání změny klíče zůstává poslední platný náhled i jeho volba klíče; potvrzení použije
+právě tento plán. Chyba se zobrazí přímo v náhledu, lze ji zavřít a volbu opakovat nebo import
+zrušit. Nově otevřený neplatný soubor předchozí náhled zruší. CS/EN hlášky rozlišují chybu
+čtení, velikost nad 256 KiB, UTF-8, formát/verzi, nepodporovaná pole, duplicity, neplatný profil,
+limit počtu záznamů, zastaralý plán, odmítnutou zálohu s přihlašovacími údaji/klíči/důvěrou,
+úložiště a nedostupný lokální klíč. Nezobrazují obsah souboru ani původní výjimku.
+Toto doplnění vyžaduje nový běh simulátorového CI; následující důkazy se vztahují k předchozí verzi.
 
 Pořadí se mění šipkami nahoru/dolů, ukládá se do metadat a přežije restart. Krajní šipky a šipky
 během operace či otevřeného náhledu jsou zakázané. VoiceOver popisky CS/EN obsahují jméno profilu.

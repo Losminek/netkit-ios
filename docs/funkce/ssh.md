@@ -280,6 +280,7 @@ Testy: `tools/test_netkit_ssh_export.py` (syntetické configy, podvržený `ssh 
 
 Android exportuje `netkit-ssh-profiles.json`: `format: "netkit-ssh-profiles"`,
 `schema: 2`, `source: "netkit-android"`, pole `profiles` a prázdné `skipped`.
+iOS používá stejný formát se zdrojem `netkit-ios`; import přijímá oba zdroje.
 Každý profil obsahuje `alias`, `host`, `port`, `username`, `authentication`
 (`PASSWORD`, `KEY`, `INTERACTIVE`), `startupCommand` a `keepaliveSeconds`.
 Pořadí pole je pořadí v aplikaci. Import navíc přijímá volitelné `group` jako
